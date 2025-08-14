@@ -1,0 +1,27 @@
+# 개발용 프론트엔드 Dockerfile
+FROM registry.access.redhat.com/ubi10/ubi:latest
+
+# Node.js 18 설치
+RUN curl -fsSL https://rpm.nodesource.com/setup_18.x | bash - && \
+    dnf install -y nodejs curl && \
+    dnf clean all
+
+# 작업 디렉토리 설정
+WORKDIR /app
+
+# 프론트엔드 의존성 설치
+COPY frontend/package*.json ./
+RUN npm ci
+
+# 프론트엔드 소스 복사
+COPY frontend/ ./
+
+# 포트 노출
+EXPOSE 3000
+
+# 헬스체크 추가
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/ || exit 1
+
+# 개발 모드로 React 앱 실행
+CMD ["npm", "start"]
