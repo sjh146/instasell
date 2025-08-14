@@ -218,7 +218,15 @@
 </head>
 <body>
     <div class="container">
-        <h1>🛒 주문 관리 시스템</h1>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h1>🛒 주문 관리 시스템</h1>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <span style="color: #666;">관리자: {{ current_user.username }}</span>
+                <a href="{{ url_for('admin_logout') }}" style="text-decoration: none;">
+                    <button style="padding: 8px 15px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer;">로그아웃</button>
+                </a>
+            </div>
+        </div>
         
         <!-- 통계 섹션 -->
         <div class="stats-container" id="statsContainer">

@@ -1,0 +1,15 @@
+# Redis 커스텀 이미지
+FROM redis:7-alpine
+
+# Redis 설정 파일 복사 (선택사항)
+# COPY redis.conf /usr/local/etc/redis/redis.conf
+
+# 기본 명령어 설정
+CMD ["redis-server", "--appendonly", "yes", "--requirepass", "redis_password", "--bind", "0.0.0.0", "--protected-mode", "yes"]
+
+# 포트 노출
+EXPOSE 6379
+
+# 헬스체크 설정
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD redis-cli --raw incr ping

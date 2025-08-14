@@ -133,38 +133,7 @@ dmypy.json
 # Docker volumes
 docker-volumes/
 
-# Media files (large files)
-*.mp4
-*.avi
-*.mov
-*.wmv
-*.flv
-*.webm
-*.mkv
-*.m4v
-*.3gp
-*.ogv
 
-# Image files (large files)
-*.jpg
-*.jpeg
-*.png
-*.gif
-*.bmp
-*.tiff
-*.tif
-*.svg
-*.webp
-*.avif
-
-# Audio files
-*.mp3
-*.wav
-*.flac
-*.aac
-*.ogg
-*.wma
-*.m4a
 
 # Specific large files
 frontend/public/*.mp4

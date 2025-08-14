@@ -1,0 +1,19 @@
+# PostgreSQL 커스텀 이미지
+FROM postgres:15-alpine
+
+# 초기화 스크립트 복사
+COPY init-db.sql /docker-entrypoint-initdb.d/
+
+# 환경 변수 설정
+ENV POSTGRES_DB=instagram_db
+ENV POSTGRES_USER=instagram_user
+ENV POSTGRES_PASSWORD=instagram_password
+ENV POSTGRES_INITDB_ARGS="--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+ENV POSTGRES_HOST_AUTH_METHOD=md5
+
+# 포트 노출
+EXPOSE 5432
+
+# 헬스체크 설정
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=5 \
+    CMD pg_isready -U instagram_user -d instagram_db
