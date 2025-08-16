@@ -75,49 +75,45 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     container_name: instagram-backend
-    environment:
-      - FLASK_APP=app.py
-      - FLASK_ENV=production
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=instagram_db
-      - DB_USERNAME=instagram_user
-      - DB_PASSWORD=instagram_password
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=redis_password
-      - PYTHONUNBUFFERED=1
-    # 외부 포트 노출 (직접 접속용)
+    restart: unless-stopped
     ports:
       - "5000:5000"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=instagram_user
+      - DB_PASSWORD=instagram_password
+      - DB_NAME=instagram_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PAYPAL_CLIENT_ID=AYclIN8z4NgfjpWr7HIUOAip4fOM69wFvd9BKw7g1GFCkfnZcRwHaNGqQl2M0f8286oQRmUCK1qhp82k
+      - PAYPAL_CLIENT_SECRET=ENMSCRX03HWGc1BHqLUOfngB_IoIpBffyvJ2YwnmBuxjd3jpN7UCJJGE0FkoEi2GpLecNCfr5LUhJab3
+      - PAYPAL_WEBHOOK_SECRET=${PAYPAL_WEBHOOK_SECRET:-dev-webhook-secret-12345}
+      - PAYPAL_WEBHOOK_ID=${PAYPAL_WEBHOOK_ID:-WH-DEV-1234567890}
+      - FLASK_ENV=development
+    volumes:
+      - ./backend:/app
+      - backend_logs:/app/logs
+      - backend_uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    restart: unless-stopped
     networks:
       - app-network
-    security_opt:
-      - no-new-privileges:true
-    read_only: false
-    tmpfs:
-      - /tmp
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 40s
     deploy:
       resources:
         limits:
           memory: 1G
         reservations:
           memory: 512M
-    volumes:
-      - ./backend/logs:/app/logs
-      - ./backend/uploads:/app/uploads
 
   # React 프론트엔드
   frontend:
@@ -173,6 +169,18 @@ volumes:
       type: none
       o: bind
       device: ./logs/nginx
+  backend_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./logs/backend
+  backend_uploads:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./uploads/backend
 
 networks:
   # 단일 네트워크 (모든 서비스 공유)
