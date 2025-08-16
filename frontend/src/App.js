@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
 // 상품 정보를 객체로 관리합니다.
@@ -61,6 +60,9 @@ function App() {
   const [isLiked, setIsLiked] = useState(false);
   const [backendUrl, setBackendUrl] = useState(getBackendUrl());
   const [isLoading, setIsLoading] = useState(true);
+  const [paypalLoaded, setPaypalLoaded] = useState(false);
+  const [paypalButtons, setPaypalButtons] = useState(null);
+  const paypalContainerRef = useRef(null);
 
   // 모바일 감지 함수
   const checkMobile = () => {
@@ -68,6 +70,106 @@ function App() {
     const isMobileDevice = window.innerWidth <= mobileBreakpoint || 
                           /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     setIsMobile(isMobileDevice);
+  };
+
+  // PayPal SDK 로드
+  const loadPayPalSDK = () => {
+    if (window.paypal) {
+      setPaypalLoaded(true);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&currency=USD&intent=capture`;
+    script.async = true;
+    script.onload = () => {
+      console.log('✅ PayPal SDK 로드 완료');
+      setPaypalLoaded(true);
+      initializePayPalButtons();
+    };
+    script.onerror = () => {
+      console.error('❌ PayPal SDK 로드 실패');
+      setPaypalLoaded(false);
+    };
+    document.body.appendChild(script);
+  };
+
+  // PayPal 버튼 초기화
+  const initializePayPalButtons = () => {
+    if (!window.paypal || !paypalContainerRef.current) {
+      return;
+    }
+
+    try {
+      // 기존 버튼 제거
+      if (paypalButtons) {
+        paypalButtons.close();
+      }
+
+      // 새 버튼 생성
+      const buttons = window.paypal.Buttons({
+        style: {
+          layout: 'vertical',
+          color: 'gold',
+          shape: 'rect',
+          label: 'paypal'
+        },
+        createOrder: (data, actions) => {
+          console.log("PayPal createOrder 호출됨");
+          return actions.order.create({
+            purchase_units: [
+              {
+                description: product.name,
+                amount: {
+                  value: product.price,
+                  currency_code: "USD"
+                }
+              }
+            ],
+            application_context: {
+              shipping_preference: "NO_SHIPPING"
+            }
+          });
+        },
+        onApprove: async (data, actions) => {
+          console.log("PayPal onApprove 호출됨", data);
+          try {
+            const order = await actions.order.capture();
+            console.log("PayPal 결제 완료:", order);
+            await handlePayPalPayment(order);
+          } catch (error) {
+            console.error('PayPal 결제 처리 중 오류:', error);
+            if (error.message.includes('PAYMENT_ALREADY_DONE')) {
+              alert('이미 처리된 결제입니다.');
+            } else if (error.message.includes('PAYMENT_DENIED')) {
+              alert('결제가 거부되었습니다. 다시 시도해주세요.');
+            } else {
+              alert(`PayPal 결제 처리 중 오류가 발생했습니다: ${error.message}`);
+            }
+          }
+        },
+        onError: (err) => {
+          console.error("PayPal 에러:", err);
+          alert("PayPal 결제 중 오류가 발생했습니다. 다시 시도해주세요.");
+        },
+        onCancel: (data) => {
+          console.log("PayPal 결제 취소:", data);
+          alert("PayPal 결제가 취소되었습니다.");
+        }
+      });
+
+      if (buttons.isEligible()) {
+        buttons.render(paypalContainerRef.current);
+        setPaypalButtons(buttons);
+        console.log('✅ PayPal 버튼 렌더링 완료');
+      } else {
+        console.warn('⚠️ PayPal 버튼이 지원되지 않는 환경입니다');
+        setPaypalLoaded(false);
+      }
+    } catch (error) {
+      console.error('❌ PayPal 버튼 초기화 실패:', error);
+      setPaypalLoaded(false);
+    }
   };
 
   // 컴포넌트 마운트 시 초기화
@@ -78,10 +180,23 @@ function App() {
     // 백엔드 연결 테스트
     testBackendConnection();
     
+    // PayPal SDK 로드
+    loadPayPalSDK();
+    
     return () => {
       window.removeEventListener('resize', checkMobile);
+      if (paypalButtons) {
+        paypalButtons.close();
+      }
     };
   }, []);
+
+  // PayPal SDK 로드 완료 시 버튼 초기화
+  useEffect(() => {
+    if (paypalLoaded && paypalContainerRef.current) {
+      initializePayPalButtons();
+    }
+  }, [paypalLoaded]);
 
   // 백엔드 연결 테스트
   const testBackendConnection = async () => {
@@ -329,64 +444,50 @@ function App() {
         </div>
         
         {/* PayPal 결제 버튼 */}
-        <PayPalScriptProvider options={getPayPalOptions()}>
-          <div className="mobile-paypal-container">
-            <PayPalButtons
-              style={{ 
-                layout: "vertical",
-                color: "gold",
-                shape: "rect",
-                label: "paypal"
+        <div className="mobile-paypal-container" ref={paypalContainerRef}>
+          {!paypalLoaded && (
+            <div className="paypal-loading">
+              PayPal 로딩 중...
+            </div>
+          )}
+        </div>
+        
+        {/* PayPal 로드 실패 시 대체 버튼 */}
+        {!paypalLoaded && (
+          <div style={{ 
+            marginTop: '16px', 
+            padding: '16px', 
+            backgroundColor: 'rgba(255, 255, 0, 0.1)', 
+            borderRadius: '8px',
+            textAlign: 'center',
+            color: '#ffff00',
+            fontSize: '14px'
+          }}>
+            <div style={{ marginBottom: '12px' }}>⚠️ PayPal 버튼을 로드할 수 없습니다</div>
+            <button 
+              onClick={() => {
+                console.log('PayPal SDK 재로드 시도');
+                loadPayPalSDK();
               }}
-              createOrder={(data, actions) => {
-                console.log("PayPal createOrder 호출됨");
-                return actions.order.create({
-                  purchase_units: [
-                    {
-                      description: product.name,
-                      amount: {
-                        value: product.price,
-                        currency_code: "USD"
-                      }
-                    }
-                  ],
-                  application_context: {
-                    shipping_preference: "NO_SHIPPING"
-                  }
-                });
+              style={{
+                background: 'linear-gradient(135deg, #0070ba 0%, #1546a0 100%)',
+                border: 'none',
+                borderRadius: '8px',
+                color: 'white',
+                padding: '12px 24px',
+                fontSize: '16px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                margin: '8px'
               }}
-              onApprove={async (data, actions) => {
-                console.log("PayPal onApprove 호출됨", data);
-                try {
-                  const order = await actions.order.capture();
-                  console.log("PayPal 결제 완료:", order);
-                  
-                  await handlePayPalPayment(order);
-                } catch (error) {
-                  console.error('PayPal 결제 처리 중 오류:', error);
-                  console.error('백엔드 URL:', backendUrl);
-                  
-                  // PayPal 자체 오류인 경우
-                  if (error.message.includes('PAYMENT_ALREADY_DONE')) {
-                    alert('이미 처리된 결제입니다.');
-                  } else if (error.message.includes('PAYMENT_DENIED')) {
-                    alert('결제가 거부되었습니다. 다시 시도해주세요.');
-                  } else {
-                    alert(`PayPal 결제 처리 중 오류가 발생했습니다: ${error.message}`);
-                  }
-                }
-              }}
-              onError={(err) => {
-                console.error("PayPal 에러:", err);
-                alert("PayPal 결제 중 오류가 발생했습니다. 다시 시도해주세요.");
-              }}
-              onCancel={(data) => {
-                console.log("PayPal 결제 취소:", data);
-                alert("PayPal 결제가 취소되었습니다.");
-              }}
-            />
+            >
+              PayPal 다시 로드
+            </button>
+            <div style={{ marginTop: '8px', fontSize: '12px' }}>
+              네트워크 연결을 확인하고 다시 시도해주세요
+            </div>
           </div>
-        </PayPalScriptProvider>
+        )}
         
         {/* PayPal 테스트 계정 정보 */}
         <div style={{ 
@@ -615,67 +716,50 @@ function App() {
             </div>
             
             {/* PayPal 결제 버튼 */}
-            <PayPalScriptProvider options={{ 
-              "client-id": PAYPAL_CLIENT_ID,
-              "currency": "USD",
-              "intent": "capture"
-            }}>
-              <div className="paypal-container">
-                <PayPalButtons
-                  style={{ 
-                    layout: "horizontal",
-                    color: "blue",
-                    shape: "rect",
-                    label: "pay",
-                    height: 50
+            <div className="paypal-container" ref={paypalContainerRef}>
+              {!paypalLoaded && (
+                <div className="paypal-loading">
+                  PayPal 로딩 중...
+                </div>
+              )}
+            </div>
+            
+            {/* PayPal 로드 실패 시 대체 버튼 */}
+            {!paypalLoaded && (
+              <div style={{ 
+                marginTop: '16px', 
+                padding: '16px', 
+                backgroundColor: 'rgba(255, 255, 0, 0.1)', 
+                borderRadius: '8px',
+                textAlign: 'center',
+                color: '#ffff00',
+                fontSize: '14px'
+              }}>
+                <div style={{ marginBottom: '12px' }}>⚠️ PayPal 버튼을 로드할 수 없습니다</div>
+                <button 
+                  onClick={() => {
+                    console.log('PayPal SDK 재로드 시도');
+                    loadPayPalSDK();
                   }}
-                  createOrder={(data, actions) => {
-                    return actions.order.create({
-                      purchase_units: [
-                        {
-                          description: product.name,
-                          amount: {
-                            value: product.price,
-                          },
-                        },
-                      ],
-                    });
+                  style={{
+                    background: 'linear-gradient(135deg, #0070ba 0%, #1546a0 100%)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: 'white',
+                    padding: '12px 24px',
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    margin: '8px'
                   }}
-                  onApprove={async (data, actions) => {
-                    const order = await actions.order.capture();
-                    console.log("결제 완료, 주문 정보:", order);
-                    
-                    try {
-                      const response = await fetch('http://localhost:5000/api/orders', {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                          paypal_order: order,
-                          product_name: product.name
-                        })
-                      });
-                      
-                      const result = await response.json();
-                      
-                      if (result.success) {
-                        alert(`🎉 결제 완료! ${order.payer.name.given_name}님!\n주문이 성공적으로 저장되었습니다.`);
-                      } else {
-                        alert(`결제는 완료되었지만 주문 저장 중 오류가 발생했습니다: ${result.message}`);
-                      }
-                    } catch (error) {
-                      console.error('백엔드 API 호출 중 오류:', error);
-                      alert(`결제는 완료되었지만 주문 저장 중 오류가 발생했습니다.`);
-                    }
-                  }}
-                  onError={(err) => {
-                    console.error("PayPal 결제 중 에러 발생:", err);
-                    alert("결제 중 오류가 발생했습니다. 다시 시도해주세요.");
-                  }}
-                />
+                >
+                  PayPal 다시 로드
+                </button>
+                <div style={{ marginTop: '8px', fontSize: '12px' }}>
+                  네트워크 연결을 확인하고 다시 시도해주세요
+                </div>
               </div>
-            </PayPalScriptProvider>
+            )}
           </div>
         </div>
 

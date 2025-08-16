@@ -903,59 +903,109 @@ body {
   transform: translate(-50%, -50%) scale(1.1);
 }
 
+/* PayPal JavaScript SDK 스타일 */
 .mobile-paypal-container {
   width: 100%;
   max-width: 400px;
   margin: 0 auto;
   padding: 0 16px;
+  min-height: 55px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-/* 모바일에서 PayPal 버튼 스타일 조정 */
-.mobile-paypal-container .paypal-buttons {
-  width: 100% !important;
-  min-height: 55px !important;
+.paypal-container {
+  width: 100%;
+  max-width: 300px;
+  margin: 0 auto;
+  min-height: 50px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-.mobile-paypal-container .paypal-buttons > div {
-  width: 100% !important;
-  min-height: 55px !important;
-}
-
-/* PayPal 버튼이 모바일에서 더 잘 보이도록 */
-.mobile-paypal-container iframe {
+/* PayPal 버튼 스타일 개선 */
+.mobile-paypal-container iframe,
+.paypal-container iframe {
   width: 100% !important;
   min-height: 55px !important;
   border: none !important;
+  border-radius: 8px !important;
 }
 
-/* 모바일 결제 섹션 개선 */
-.mobile-payment-section {
-  background-color: #000000;
-  padding: 24px 16px;
-  border-top: 1px solid #262626;
-  min-height: 200px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+/* 모바일에서 PayPal 버튼 최적화 */
+@media (max-width: 768px) {
+  .mobile-paypal-container {
+    min-height: 60px;
+    padding: 8px 16px;
+  }
+  
+  .mobile-paypal-container iframe {
+    min-height: 60px !important;
+    max-width: 100% !important;
+  }
+  
+  /* PayPal 버튼이 모바일에서 더 잘 보이도록 */
+  .mobile-paypal-container > div {
+    width: 100% !important;
+    min-height: 60px !important;
+  }
 }
 
-.mobile-price-info {
+/* PayPal 로딩 상태 */
+.paypal-loading {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  margin-bottom: 24px;
-  gap: 8px;
+  justify-content: center;
+  padding: 20px;
+  color: #666;
+  font-size: 14px;
+  min-height: 55px;
 }
 
-.mobile-price {
-  color: #ffffff;
-  font-size: 28px;
-  font-weight: 700;
+.paypal-loading::after {
+  content: '';
+  width: 20px;
+  height: 20px;
+  margin-left: 10px;
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #0070ba;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
-.mobile-usd-price {
-  color: #8e8e8e;
-  font-size: 16px;
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* PayPal 버튼 비활성화 상태 */
+.paypal-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* PayPal 에러 상태 */
+.paypal-error {
+  background-color: rgba(255, 0, 0, 0.1);
+  border: 1px solid rgba(255, 0, 0, 0.3);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  color: #ff0000;
+  margin: 16px 0;
+}
+
+/* PayPal 성공 상태 */
+.paypal-success {
+  background-color: rgba(0, 255, 0, 0.1);
+  border: 1px solid rgba(0, 255, 0, 0.3);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  color: #00ff00;
+  margin: 16px 0;
 }
 
 /* 데스크톱에서 모바일 컨테이너 숨기기 */
