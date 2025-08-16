@@ -4,6 +4,55 @@
 
 PayPal 웹훅 시크릿은 웹훅의 무결성을 검증하기 위한 비밀키입니다. PayPal에서 보낸 웹훅이 실제로 PayPal에서 온 것인지 확인하는 데 사용됩니다.
 
+## 🔍 웹훅 ID vs 웹훅 시크릿
+
+### **📋 차이점**
+
+| 구분 | 웹훅 ID | 웹훅 시크릿 |
+|------|---------|-------------|
+| **용도** | 웹훅을 식별하는 고유 번호 | 웹훅 서명을 검증하는 비밀키 |
+| **형태** | `WH-1234567890ABCDEF` | `1234567890abcdef1234567890abcdef` |
+| **위치** | 웹훅 목록에서 확인 | 웹훅 상세 페이지에서 확인 |
+| **사용처** | 웹훅 관리, 삭제, 수정 | 서명 검증, 보안 |
+
+### **🛠️ PayPal Developer Dashboard에서 확인 방법**
+
+#### **1. 웹훅 ID 확인**
+1. PayPal Developer Dashboard 접속
+2. **Webhooks** 메뉴로 이동
+3. 웹훅 목록에서 **웹훅 ID** 확인
+   ```
+   예시: WH-2JR3241H2131242X
+   ```
+
+#### **2. 웹훅 시크릿 확인**
+1. 웹훅 목록에서 해당 웹훅 **클릭**
+2. **Webhook Secret** 섹션에서 시크릿 확인
+   ```
+   예시: 1234567890abcdef1234567890abcdef
+   ```
+
+### **💻 코드에서의 사용**
+
+#### **웹훅 ID 사용**
+```python
+# 웹훅 관리용 (삭제, 수정 등)
+webhook_id = "WH-2JR3241H2131242X"
+
+# PayPal SDK에서 웹훅 삭제
+paypalrestsdk.Webhook.delete(webhook_id)
+```
+
+#### **웹훅 시크릿 사용**
+```python
+# 서명 검증용
+PAYPAL_WEBHOOK_SECRET = "1234567890abcdef1234567890abcdef"
+
+def verify_webhook_signature(payload, headers):
+    # 웹훅 시크릿을 사용하여 서명 검증
+    return verify_signature(payload, headers, PAYPAL_WEBHOOK_SECRET)
+```
+
 ## 🛠️ 웹훅 시크릿 설정 방법
 
 ### **1. PayPal Developer Dashboard에서 웹훅 생성**
@@ -38,6 +87,7 @@ PayPal 웹훅 시크릿은 웹훅의 무결성을 검증하기 위한 비밀키�
 ```bash
 # backend/.env 파일 생성
 PAYPAL_WEBHOOK_SECRET=your-actual-webhook-secret-from-paypal
+PAYPAL_WEBHOOK_ID=your-actual-webhook-id-from-paypal
 PAYPAL_CLIENT_ID=your-paypal-client-id
 PAYPAL_CLIENT_SECRET=your-paypal-client-secret
 FLASK_ENV=development
@@ -47,6 +97,7 @@ FLASK_ENV=development
 ```bash
 # 서버에서 환경 변수 설정
 export PAYPAL_WEBHOOK_SECRET=your-actual-webhook-secret-from-paypal
+export PAYPAL_WEBHOOK_ID=your-actual-webhook-id-from-paypal
 export PAYPAL_CLIENT_ID=your-paypal-client-id
 export PAYPAL_CLIENT_SECRET=your-paypal-client-secret
 export FLASK_ENV=production
@@ -59,6 +110,7 @@ services:
   backend:
     environment:
       - PAYPAL_WEBHOOK_SECRET=your-actual-webhook-secret-from-paypal
+      - PAYPAL_WEBHOOK_ID=your-actual-webhook-id-from-paypal
       - PAYPAL_CLIENT_ID=your-paypal-client-id
       - PAYPAL_CLIENT_SECRET=your-paypal-client-secret
       - FLASK_ENV=production
@@ -151,6 +203,7 @@ secrets/
 ```bash
 # 프로덕션에서는 반드시 실제 시크릿 사용
 export PAYPAL_WEBHOOK_SECRET=WH-2JR3241H2131242X-1234567890123456
+export PAYPAL_WEBHOOK_ID=WH-2JR3241H2131242X
 export FLASK_ENV=production
 ```
 
@@ -208,6 +261,7 @@ export PAYPAL_WEBHOOK_SECRET=your-actual-webhook-secret
 ## 📋 체크리스트
 
 - [ ] PayPal Developer Dashboard에서 웹훅 생성
+- [ ] 웹훅 ID 복사
 - [ ] 웹훅 시크릿 복사
 - [ ] 환경 변수 설정 (.env 파일 또는 시스템 환경 변수)
 - [ ] .gitignore에 .env 파일 추가

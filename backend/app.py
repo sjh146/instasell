@@ -113,6 +113,9 @@ class Order(db.Model):
 # PayPal 웹훅 시크릿 (실제 환경에서는 환경 변수로 관리)
 PAYPAL_WEBHOOK_SECRET = os.environ.get('PAYPAL_WEBHOOK_SECRET')
 
+# PayPal 웹훅 ID (웹훅 관리용)
+PAYPAL_WEBHOOK_ID = os.environ.get('PAYPAL_WEBHOOK_ID')
+
 # 개발 환경에서만 기본값 사용
 if not PAYPAL_WEBHOOK_SECRET and os.environ.get('FLASK_ENV') == 'development':
     PAYPAL_WEBHOOK_SECRET = 'dev-webhook-secret-12345'
@@ -121,6 +124,14 @@ elif not PAYPAL_WEBHOOK_SECRET:
     print("❌ PAYPAL_WEBHOOK_SECRET 환경 변수가 설정되지 않았습니다.")
     print("   프로덕션 환경에서는 반드시 환경 변수를 설정하세요.")
     PAYPAL_WEBHOOK_SECRET = None
+
+if not PAYPAL_WEBHOOK_ID and os.environ.get('FLASK_ENV') == 'development':
+    PAYPAL_WEBHOOK_ID = 'WH-DEV-1234567890'
+    print("⚠️ 개발 환경에서 기본 웹훅 ID를 사용합니다. 프로덕션에서는 환경 변수를 설정하세요.")
+elif not PAYPAL_WEBHOOK_ID:
+    print("ℹ️ PAYPAL_WEBHOOK_ID 환경 변수가 설정되지 않았습니다.")
+    print("   웹훅 관리 기능을 사용하려면 환경 변수를 설정하세요.")
+    PAYPAL_WEBHOOK_ID = None
 
 # 웹훅 이벤트 로그 모델
 class WebhookEvent(db.Model):
