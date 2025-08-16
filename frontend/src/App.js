@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 import './App.css';
 
@@ -18,12 +18,136 @@ const PAYPAL_CLIENT_ID = "AYclIN8z4NgfjpWr7HIUOAip4fOM69wFvd9BKw7g1GFCkfnZcRwHaN
 
 function App() {
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // 모바일 감지 함수
+  const checkMobile = () => {
+    const mobileBreakpoint = 768;
+    setIsMobile(window.innerWidth <= mobileBreakpoint);
+  };
+
+  // 컴포넌트 마운트 시와 윈도우 리사이즈 시 모바일 감지
+  useEffect(() => {
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => {
+      window.removeEventListener('resize', checkMobile);
+    };
+  }, []);
 
   const handleVideoClick = () => {
     setIsVideoPlaying(true);
   };
 
-  return (
+  // 모바일 전용 컴포넌트
+  const MobileView = () => (
+    <div className="mobile-container">
+      <div className="mobile-header">
+        <div className="mobile-user-info">
+          <div className="mobile-profile-pic">👤</div>
+          <span className="mobile-username">dogunnny</span>
+        </div>
+      </div>
+
+      {/* 모바일 동영상/이미지 섹션 */}
+      <div className="mobile-video-section">
+        {isVideoPlaying ? (
+          <video 
+            src={product.videoUrl} 
+            controls 
+            autoPlay 
+            className="mobile-video"
+            onEnded={() => setIsVideoPlaying(false)}
+          />
+        ) : (
+          <div className="mobile-image-container">
+            <img src={product.imageUrl} alt="Post" className="mobile-image" />
+            <button 
+              className="mobile-video-play-button"
+              onClick={handleVideoClick}
+            >
+              ▶️
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* 모바일 결제 섹션 */}
+      <div className="mobile-payment-section">
+        <div className="mobile-price-info">
+          <span className="mobile-price">{product.krw_price}</span>
+          <span className="mobile-usd-price">(USD ${product.price})</span>
+        </div>
+        
+        {/* PayPal 결제 버튼 */}
+        <PayPalScriptProvider options={{ 
+          "client-id": PAYPAL_CLIENT_ID,
+          "currency": "USD",
+          "intent": "capture"
+        }}>
+          <div className="mobile-paypal-container">
+            <PayPalButtons
+              style={{ 
+                layout: "horizontal",
+                color: "blue",
+                shape: "rect",
+                label: "pay",
+                height: 50
+              }}
+              createOrder={(data, actions) => {
+                return actions.order.create({
+                  purchase_units: [
+                    {
+                      description: product.name,
+                      amount: {
+                        value: product.price,
+                      },
+                    },
+                  ],
+                });
+              }}
+              onApprove={async (data, actions) => {
+                const order = await actions.order.capture();
+                console.log("결제 완료, 주문 정보:", order);
+                
+                try {
+                  const response = await fetch('http://localhost:5000/api/orders', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      paypal_order: order,
+                      product_name: product.name
+                    })
+                  });
+                  
+                  const result = await response.json();
+                  
+                  if (result.success) {
+                    alert(`🎉 결제 완료! ${order.payer.name.given_name}님!\n주문이 성공적으로 저장되었습니다.`);
+                  } else {
+                    alert(`결제는 완료되었지만 주문 저장 중 오류가 발생했습니다: ${result.message}`);
+                  }
+                } catch (error) {
+                  console.error('백엔드 API 호출 중 오류:', error);
+                  alert(`결제는 완료되었지만 주문 저장 중 오류가 발생했습니다.`);
+                }
+              }}
+              onError={(err) => {
+                console.error("PayPal 결제 중 에러 발생:", err);
+                alert("결제 중 오류가 발생했습니다. 다시 시도해주세요.");
+              }}
+            />
+          </div>
+        </PayPalScriptProvider>
+      </div>
+    </div>
+  );
+
+  // 데스크톱 전용 컴포넌트
+  const DesktopView = () => (
     <div className="container">
       {/* 사이드바 네비게이션 */}
       <div className="sidebar">
@@ -332,8 +456,9 @@ function App() {
       </div>
     </div>
   );
+
+  // 모바일 여부에 따라 다른 뷰 렌더링
+  return isMobile ? <MobileView /> : <DesktopView />;
 }
-
-
 
 export default App;
