@@ -115,17 +115,20 @@ function App() {
         <PayPalScriptProvider options={{ 
           "client-id": PAYPAL_CLIENT_ID,
           "currency": "USD",
-          "intent": "capture"
+          "intent": "capture",
+          "components": "buttons",
+          "disable-funding": "credit,card"
         }}>
           <div className="mobile-paypal-container">
             <PayPalButtons
               style={{ 
-                layout: "horizontal",
-                color: "blue",
+                layout: "vertical",
+                color: "gold",
                 shape: "rect",
-                label: "pay",
-                height: 50
+                label: "paypal",
+                height: 55
               }}
+              fundingSource="paypal"
               createOrder={(data, actions) => {
                 return actions.order.create({
                   purchase_units: [
@@ -133,16 +136,20 @@ function App() {
                       description: product.name,
                       amount: {
                         value: product.price,
+                        currency_code: "USD"
                       },
                     },
                   ],
+                  application_context: {
+                    shipping_preference: "NO_SHIPPING"
+                  }
                 });
               }}
               onApprove={async (data, actions) => {
-                const order = await actions.order.capture();
-                console.log("결제 완료, 주문 정보:", order);
-                
                 try {
+                  const order = await actions.order.capture();
+                  console.log("결제 완료, 주문 정보:", order);
+                  
                   const response = await fetch('http://localhost:5000/api/orders', {
                     method: 'POST',
                     headers: {
@@ -169,6 +176,10 @@ function App() {
               onError={(err) => {
                 console.error("PayPal 결제 중 에러 발생:", err);
                 alert("결제 중 오류가 발생했습니다. 다시 시도해주세요.");
+              }}
+              onCancel={(data) => {
+                console.log("결제가 취소되었습니다:", data);
+                alert("결제가 취소되었습니다.");
               }}
             />
           </div>
