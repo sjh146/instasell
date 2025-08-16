@@ -3,7 +3,7 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import json
 import hmac
@@ -110,6 +110,9 @@ class Order(db.Model):
             'updated_at': self.updated_at.isoformat()
         }
 
+# PayPal 웹훅 시크릿 (실제 환경에서는 환경 변수로 관리)
+PAYPAL_WEBHOOK_SECRET = os.environ.get('PAYPAL_WEBHOOK_SECRET', 'your-webhook-secret-here')
+
 # 웹훅 이벤트 로그 모델
 class WebhookEvent(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -123,9 +126,29 @@ class WebhookEvent(db.Model):
     payer_email = db.Column(db.String(100))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     raw_data = db.Column(db.Text)  # 전체 웹훅 데이터 저장
+    processed = db.Column(db.Boolean, default=False)  # 처리 완료 여부
+    processing_time = db.Column(db.Float)  # 처리 시간 (초)
+    error_message = db.Column(db.Text)  # 에러 메시지
 
     def __repr__(self):
         return f'<WebhookEvent {self.event_type}:{self.event_id}>'
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'event_type': self.event_type,
+            'event_id': self.event_id,
+            'resource_type': self.resource_type,
+            'resource_id': self.resource_id,
+            'status': self.status,
+            'amount': self.amount,
+            'currency': self.currency,
+            'payer_email': self.payer_email,
+            'created_at': self.created_at.isoformat(),
+            'processed': self.processed,
+            'processing_time': self.processing_time,
+            'error_message': self.error_message
+        }
 
 # PayPal 웹훅 검증 함수
 def verify_webhook_signature(payload, headers):
@@ -140,19 +163,27 @@ def verify_webhook_signature(payload, headers):
         transmission_sig = headers.get('PAYPAL-TRANSMISSION-SIG')
         transmission_time = headers.get('PAYPAL-TRANSMISSION-TIME')
         
+        print(f"🔐 웹훅 서명 검증 시작")
+        print(f"   - AUTH_ALGO: {auth_algo}")
+        print(f"   - CERT_URL: {cert_url}")
+        print(f"   - TRANSMISSION_ID: {transmission_id}")
+        print(f"   - TRANSMISSION_TIME: {transmission_time}")
+        
         # 실제 환경에서는 PayPal의 공개키를 사용하여 서명 검증
         # 여기서는 간단한 검증만 수행
         if not all([auth_algo, cert_url, transmission_id, transmission_sig, transmission_time]):
+            print("❌ 필수 웹훅 헤더가 누락됨")
             return False
             
         # 실제 구현에서는 PayPal SDK를 사용하여 서명 검증
         # return paypal.verify_webhook_signature(payload, headers)
         
         # 개발 환경에서는 항상 True 반환
+        print("✅ 웹훅 서명 검증 성공 (개발 모드)")
         return True
         
     except Exception as e:
-        print(f"웹훅 서명 검증 오류: {e}")
+        print(f"❌ 웹훅 서명 검증 오류: {e}")
         return False
 
 # PayPal 웹훅 엔드포인트
@@ -161,12 +192,18 @@ def paypal_webhook():
     """
     PayPal 웹훅을 처리하는 엔드포인트
     """
+    start_time = datetime.utcnow()
+    
     try:
         # 웹훅 데이터 받기
         payload = request.get_data(as_text=True)
         headers = dict(request.headers)
         
-        print(f"🔔 PayPal 웹훅 수신: {headers.get('PAYPAL-TRANSMISSION-ID')}")
+        print(f"\n🔔 PayPal 웹훅 수신 시작")
+        print(f"   - 전송 ID: {headers.get('PAYPAL-TRANSMISSION-ID')}")
+        print(f"   - Content-Type: {headers.get('Content-Type')}")
+        print(f"   - User-Agent: {headers.get('User-Agent')}")
+        print(f"   - 페이로드 크기: {len(payload)} bytes")
         
         # 웹훅 서명 검증 (실제 환경에서는 필수)
         if not verify_webhook_signature(payload, headers):
@@ -179,14 +216,18 @@ def paypal_webhook():
         event_id = webhook_data.get('id')
         resource = webhook_data.get('resource', {})
         
-        print(f"📋 웹훅 이벤트: {event_type}")
-        print(f"🆔 이벤트 ID: {event_id}")
+        print(f"📋 웹훅 이벤트 정보:")
+        print(f"   - 이벤트 타입: {event_type}")
+        print(f"   - 이벤트 ID: {event_id}")
+        print(f"   - 리소스 타입: {resource.get('type', 'N/A')}")
+        print(f"   - 리소스 ID: {resource.get('id', 'N/A')}")
+        print(f"   - 상태: {resource.get('status', 'N/A')}")
         
         # 중복 이벤트 확인
         existing_event = WebhookEvent.query.filter_by(event_id=event_id).first()
         if existing_event:
             print(f"⚠️ 중복 웹훅 이벤트: {event_id}")
-            return jsonify({'status': 'duplicate'}), 200
+            return jsonify({'status': 'duplicate', 'message': 'Event already processed'}), 200
         
         # 웹훅 이벤트 저장
         webhook_event = WebhookEvent(
@@ -204,24 +245,67 @@ def paypal_webhook():
         db.session.add(webhook_event)
         db.session.commit()
         
+        print(f"💾 웹훅 이벤트 데이터베이스 저장 완료")
+        
         # 이벤트 타입별 처리
-        if event_type == 'PAYMENT.CAPTURE.COMPLETED':
-            handle_payment_completed(resource)
-        elif event_type == 'PAYMENT.CAPTURE.DENIED':
-            handle_payment_denied(resource)
-        elif event_type == 'PAYMENT.CAPTURE.REFUNDED':
-            handle_payment_refunded(resource)
-        elif event_type == 'CHECKOUT.ORDER.COMPLETED':
-            handle_order_completed(resource)
-        else:
-            print(f"📝 처리되지 않은 이벤트 타입: {event_type}")
+        try:
+            if event_type == 'PAYMENT.CAPTURE.COMPLETED':
+                result = handle_payment_completed(resource)
+                print(f"✅ 결제 완료 처리: {result}")
+            elif event_type == 'PAYMENT.CAPTURE.DENIED':
+                result = handle_payment_denied(resource)
+                print(f"❌ 결제 거부 처리: {result}")
+            elif event_type == 'PAYMENT.CAPTURE.REFUNDED':
+                result = handle_payment_refunded(resource)
+                print(f"🔄 환불 처리: {result}")
+            elif event_type == 'CHECKOUT.ORDER.COMPLETED':
+                result = handle_order_completed(resource)
+                print(f"✅ 주문 완료 처리: {result}")
+            elif event_type == 'PAYMENT.CAPTURE.PENDING':
+                result = handle_payment_pending(resource)
+                print(f"⏳ 결제 대기 처리: {result}")
+            elif event_type == 'PAYMENT.CAPTURE.REVERSED':
+                result = handle_payment_reversed(resource)
+                print(f"🔄 결제 취소 처리: {result}")
+            else:
+                print(f"📝 처리되지 않은 이벤트 타입: {event_type}")
+                result = "Unhandled event type"
+            
+            # 처리 완료 표시
+            webhook_event.processed = True
+            webhook_event.processing_time = (datetime.utcnow() - start_time).total_seconds()
+            db.session.commit()
+            
+        except Exception as e:
+            print(f"❌ 이벤트 처리 중 오류: {e}")
+            webhook_event.processed = False
+            webhook_event.error_message = str(e)
+            webhook_event.processing_time = (datetime.utcnow() - start_time).total_seconds()
+            db.session.commit()
+            raise
         
-        print(f"✅ 웹훅 처리 완료: {event_type}")
-        return jsonify({'status': 'success'}), 200
+        total_time = (datetime.utcnow() - start_time).total_seconds()
+        print(f"✅ 웹훅 처리 완료: {event_type} (소요시간: {total_time:.2f}초)")
         
+        return jsonify({
+            'status': 'success',
+            'event_type': event_type,
+            'event_id': event_id,
+            'processing_time': total_time,
+            'message': f'Webhook processed successfully: {event_type}'
+        }), 200
+        
+    except json.JSONDecodeError as e:
+        print(f"❌ JSON 파싱 오류: {e}")
+        return jsonify({'error': 'Invalid JSON payload'}), 400
     except Exception as e:
         print(f"❌ 웹훅 처리 오류: {e}")
-        return jsonify({'error': str(e)}), 500
+        total_time = (datetime.utcnow() - start_time).total_seconds()
+        return jsonify({
+            'error': str(e),
+            'processing_time': total_time,
+            'message': 'Webhook processing failed'
+        }), 500
 
 def handle_payment_completed(resource):
     """결제 완료 처리"""
@@ -230,42 +314,94 @@ def handle_payment_completed(resource):
     currency = resource.get('amount', {}).get('currency_code')
     payer_email = resource.get('payer', {}).get('email_address')
     
-    print(f"💰 결제 완료: {payment_id}")
-    print(f"💵 금액: {amount} {currency}")
-    print(f"📧 결제자: {payer_email}")
+    print(f"💰 결제 완료 처리 시작:")
+    print(f"   - 결제 ID: {payment_id}")
+    print(f"   - 금액: {amount} {currency}")
+    print(f"   - 결제자: {payer_email}")
     
-    # 여기에 결제 완료 후 처리 로직 추가
-    # 예: 주문 상태 업데이트, 이메일 발송, 재고 관리 등
+    # 주문 상태 업데이트
+    order = Order.query.filter_by(paypal_order_id=payment_id).first()
+    if order:
+        order.payment_status = 'completed'
+        order.updated_at = datetime.utcnow()
+        db.session.commit()
+        print(f"   - 주문 상태 업데이트 완료")
+    
+    # 여기에 추가 처리 로직 구현
+    # 예: 이메일 발송, 재고 관리, 로그 기록 등
+    
+    return f"Payment completed: {payment_id}"
 
 def handle_payment_denied(resource):
     """결제 거부 처리"""
     payment_id = resource.get('id')
     reason = resource.get('status_details', {}).get('reason')
     
-    print(f"❌ 결제 거부: {payment_id}")
-    print(f"📝 거부 사유: {reason}")
+    print(f"❌ 결제 거부 처리 시작:")
+    print(f"   - 결제 ID: {payment_id}")
+    print(f"   - 거부 사유: {reason}")
     
-    # 여기에 결제 거부 후 처리 로직 추가
+    # 주문 상태 업데이트
+    order = Order.query.filter_by(paypal_order_id=payment_id).first()
+    if order:
+        order.payment_status = 'denied'
+        order.updated_at = datetime.utcnow()
+        db.session.commit()
+        print(f"   - 주문 상태 업데이트 완료")
+    
+    return f"Payment denied: {payment_id}"
 
 def handle_payment_refunded(resource):
     """환불 처리"""
     payment_id = resource.get('id')
     refund_amount = resource.get('amount', {}).get('value')
     
-    print(f"🔄 환불 완료: {payment_id}")
-    print(f"💵 환불 금액: {refund_amount}")
+    print(f"🔄 환불 처리 시작:")
+    print(f"   - 결제 ID: {payment_id}")
+    print(f"   - 환불 금액: {refund_amount}")
     
-    # 여기에 환불 후 처리 로직 추가
+    # 주문 상태 업데이트
+    order = Order.query.filter_by(paypal_order_id=payment_id).first()
+    if order:
+        order.payment_status = 'refunded'
+        order.updated_at = datetime.utcnow()
+        db.session.commit()
+        print(f"   - 주문 상태 업데이트 완료")
+    
+    return f"Payment refunded: {payment_id}"
 
 def handle_order_completed(resource):
     """주문 완료 처리"""
     order_id = resource.get('id')
     status = resource.get('status')
     
-    print(f"✅ 주문 완료: {order_id}")
-    print(f"📊 주문 상태: {status}")
+    print(f"✅ 주문 완료 처리 시작:")
+    print(f"   - 주문 ID: {order_id}")
+    print(f"   - 주문 상태: {status}")
     
-    # 여기에 주문 완료 후 처리 로직 추가
+    return f"Order completed: {order_id}"
+
+def handle_payment_pending(resource):
+    """결제 대기 처리"""
+    payment_id = resource.get('id')
+    status = resource.get('status')
+    
+    print(f"⏳ 결제 대기 처리 시작:")
+    print(f"   - 결제 ID: {payment_id}")
+    print(f"   - 상태: {status}")
+    
+    return f"Payment pending: {payment_id}"
+
+def handle_payment_reversed(resource):
+    """결제 취소 처리"""
+    payment_id = resource.get('id')
+    status = resource.get('status')
+    
+    print(f"🔄 결제 취소 처리 시작:")
+    print(f"   - 결제 ID: {payment_id}")
+    print(f"   - 상태: {status}")
+    
+    return f"Payment reversed: {payment_id}"
 
 # 웹훅 이벤트 조회 엔드포인트 (관리자용)
 @app.route('/api/webhooks/events', methods=['GET'])
@@ -275,8 +411,21 @@ def get_webhook_events():
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
+        event_type = request.args.get('event_type')
+        processed = request.args.get('processed')
         
-        events = WebhookEvent.query.order_by(
+        # 쿼리 구성
+        query = WebhookEvent.query
+        
+        # 필터링
+        if event_type:
+            query = query.filter(WebhookEvent.event_type == event_type)
+        if processed is not None:
+            processed_bool = processed.lower() == 'true'
+            query = query.filter(WebhookEvent.processed == processed_bool)
+        
+        # 정렬 및 페이지네이션
+        events = query.order_by(
             WebhookEvent.created_at.desc()
         ).paginate(
             page=page, 
@@ -286,21 +435,197 @@ def get_webhook_events():
         
         return jsonify({
             'success': True,
-            'events': [{
-                'id': event.id,
-                'event_type': event.event_type,
-                'event_id': event.event_id,
-                'resource_type': event.resource_type,
-                'resource_id': event.resource_id,
-                'status': event.status,
-                'amount': event.amount,
-                'currency': event.currency,
-                'payer_email': event.payer_email,
-                'created_at': event.created_at.isoformat()
-            } for event in events.items],
+            'events': [event.to_dict() for event in events.items],
             'total': events.total,
             'pages': events.pages,
-            'current_page': events.page
+            'current_page': events.page,
+            'per_page': per_page,
+            'filters': {
+                'event_type': event_type,
+                'processed': processed
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# 웹훅 통계 엔드포인트
+@app.route('/api/webhooks/stats', methods=['GET'])
+@login_required
+def get_webhook_stats():
+    """웹훅 통계 조회"""
+    try:
+        # 전체 이벤트 수
+        total_events = WebhookEvent.query.count()
+        
+        # 처리된 이벤트 수
+        processed_events = WebhookEvent.query.filter_by(processed=True).count()
+        
+        # 처리되지 않은 이벤트 수
+        unprocessed_events = WebhookEvent.query.filter_by(processed=False).count()
+        
+        # 이벤트 타입별 통계
+        event_type_stats = db.session.query(
+            WebhookEvent.event_type,
+            db.func.count(WebhookEvent.id).label('count')
+        ).group_by(WebhookEvent.event_type).all()
+        
+        # 최근 24시간 이벤트 수
+        yesterday = datetime.utcnow() - timedelta(days=1)
+        recent_events = WebhookEvent.query.filter(
+            WebhookEvent.created_at >= yesterday
+        ).count()
+        
+        # 평균 처리 시간
+        avg_processing_time = db.session.query(
+            db.func.avg(WebhookEvent.processing_time)
+        ).filter(WebhookEvent.processing_time.isnot(None)).scalar()
+        
+        return jsonify({
+            'success': True,
+            'stats': {
+                'total_events': total_events,
+                'processed_events': processed_events,
+                'unprocessed_events': unprocessed_events,
+                'recent_events_24h': recent_events,
+                'avg_processing_time': float(avg_processing_time) if avg_processing_time else 0,
+                'event_types': [
+                    {'type': stat[0], 'count': stat[1]} 
+                    for stat in event_type_stats
+                ]
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# 웹훅 재처리 엔드포인트
+@app.route('/api/webhooks/events/<int:event_id>/retry', methods=['POST'])
+@login_required
+def retry_webhook_event(event_id):
+    """실패한 웹훅 이벤트 재처리"""
+    try:
+        event = WebhookEvent.query.get_or_404(event_id)
+        
+        if event.processed:
+            return jsonify({'success': False, 'error': 'Event already processed'}), 400
+        
+        # 원본 데이터로 재처리
+        webhook_data = json.loads(event.raw_data)
+        event_type = webhook_data.get('event_type')
+        resource = webhook_data.get('resource', {})
+        
+        # 이벤트 타입별 재처리
+        if event_type == 'PAYMENT.CAPTURE.COMPLETED':
+            result = handle_payment_completed(resource)
+        elif event_type == 'PAYMENT.CAPTURE.DENIED':
+            result = handle_payment_denied(resource)
+        elif event_type == 'PAYMENT.CAPTURE.REFUNDED':
+            result = handle_payment_refunded(resource)
+        elif event_type == 'CHECKOUT.ORDER.COMPLETED':
+            result = handle_order_completed(resource)
+        else:
+            result = "Unhandled event type"
+        
+        # 처리 완료 표시
+        event.processed = True
+        event.error_message = None
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Event {event_id} reprocessed successfully',
+            'result': result
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# 웹훅 테스트 엔드포인트 (개발용)
+@app.route('/api/webhooks/test', methods=['POST'])
+def test_webhook():
+    """웹훅 테스트용 엔드포인트"""
+    try:
+        # 테스트 데이터 생성
+        test_data = {
+            "id": f"WH-TEST-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+            "event_type": "PAYMENT.CAPTURE.COMPLETED",
+            "create_time": datetime.utcnow().isoformat(),
+            "resource_type": "capture",
+            "resource": {
+                "id": f"TEST-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+                "status": "COMPLETED",
+                "amount": {
+                    "currency_code": "USD",
+                    "value": "75.00"
+                },
+                "payer": {
+                    "email_address": "test@example.com"
+                }
+            }
+        }
+        
+        # 웹훅 처리 함수 직접 호출
+        print(f"🧪 웹훅 테스트 시작: {test_data['event_type']}")
+        
+        # 웹훅 이벤트 저장
+        webhook_event = WebhookEvent(
+            event_type=test_data['event_type'],
+            event_id=test_data['id'],
+            resource_type=test_data['resource_type'],
+            resource_id=test_data['resource']['id'],
+            status=test_data['resource']['status'],
+            amount=test_data['resource']['amount']['value'],
+            currency=test_data['resource']['amount']['currency_code'],
+            payer_email=test_data['resource']['payer']['email_address'],
+            raw_data=json.dumps(test_data),
+            processed=True
+        )
+        
+        db.session.add(webhook_event)
+        db.session.commit()
+        
+        # 이벤트 처리
+        result = handle_payment_completed(test_data['resource'])
+        
+        return jsonify({
+            'success': True,
+            'message': 'Test webhook processed successfully',
+            'test_data': test_data,
+            'result': result
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# 웹훅 상태 확인 엔드포인트
+@app.route('/api/webhooks/status', methods=['GET'])
+def webhook_status():
+    """웹훅 시스템 상태 확인"""
+    try:
+        # 최근 웹훅 이벤트 수
+        recent_count = WebhookEvent.query.filter(
+            WebhookEvent.created_at >= datetime.utcnow() - timedelta(hours=1)
+        ).count()
+        
+        # 처리되지 않은 이벤트 수
+        unprocessed_count = WebhookEvent.query.filter_by(processed=False).count()
+        
+        # 마지막 웹훅 시간
+        last_webhook = WebhookEvent.query.order_by(
+            WebhookEvent.created_at.desc()
+        ).first()
+        
+        return jsonify({
+            'success': True,
+            'status': {
+                'system': 'running',
+                'recent_webhooks_1h': recent_count,
+                'unprocessed_events': unprocessed_count,
+                'last_webhook_time': last_webhook.created_at.isoformat() if last_webhook else None,
+                'webhook_endpoint': '/api/webhooks/paypal',
+                'test_endpoint': '/api/webhooks/test'
+            }
         })
         
     except Exception as e:
