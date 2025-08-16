@@ -111,44 +111,130 @@ function App() {
           <span className="mobile-usd-price">(USD ${product.price})</span>
         </div>
         
-        {/* PayPal 결제 버튼 */}
+        {/* 테스트 버튼 */}
+        <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+          <button 
+            onClick={() => {
+              console.log("테스트 버튼 클릭됨");
+              alert("테스트 버튼이 작동합니다!");
+            }}
+            style={{
+              padding: '12px 24px',
+              backgroundColor: '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '16px',
+              cursor: 'pointer'
+            }}
+          >
+            테스트 버튼 (클릭해보세요)
+          </button>
+        </div>
+        
+        {/* 결제 시뮬레이션 버튼 */}
+        <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+          <button 
+            onClick={async () => {
+              console.log("결제 시뮬레이션 시작");
+              try {
+                // PayPal 결제 시뮬레이션
+                const mockOrder = {
+                  id: "PAY-" + Date.now(),
+                  status: "COMPLETED",
+                  payer: {
+                    name: {
+                      given_name: "테스트",
+                      surname: "사용자"
+                    },
+                    email_address: "test@example.com"
+                  },
+                  purchase_units: [{
+                    amount: {
+                      value: product.price,
+                      currency_code: "USD"
+                    }
+                  }]
+                };
+                
+                console.log("시뮬레이션 주문:", mockOrder);
+                
+                const response = await fetch('http://localhost:5000/api/orders', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    paypal_order: mockOrder,
+                    product_name: product.name
+                  })
+                });
+                
+                const result = await response.json();
+                console.log("백엔드 응답:", result);
+                
+                if (result.success) {
+                  alert(`🎉 결제 완료! ${mockOrder.payer.name.given_name}님!\n주문이 성공적으로 저장되었습니다.\n주문 ID: ${mockOrder.id}`);
+                } else {
+                  alert(`결제는 완료되었지만 주문 저장 중 오류가 발생했습니다: ${result.message}`);
+                }
+              } catch (error) {
+                console.error('결제 시뮬레이션 중 오류:', error);
+                alert(`결제 처리 중 오류가 발생했습니다: ${error.message}`);
+              }
+            }}
+            style={{
+              padding: '16px 32px',
+              backgroundColor: '#28a745',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '18px',
+              cursor: 'pointer',
+              fontWeight: 'bold'
+            }}
+          >
+            💳 결제 시뮬레이션 (${product.price})
+          </button>
+        </div>
+        
+        {/* PayPal 디버깅 정보 */}
+        <div style={{ marginBottom: '20px', textAlign: 'center', color: 'white', fontSize: '12px' }}>
+          PayPal Client ID: {PAYPAL_CLIENT_ID.substring(0, 10)}...
+        </div>
+        
+        {/* PayPal 결제 버튼 (주석 처리) */}
+        {/*
         <PayPalScriptProvider options={{ 
           "client-id": PAYPAL_CLIENT_ID,
-          "currency": "USD",
-          "intent": "capture",
-          "components": "buttons",
-          "disable-funding": "credit,card"
+          "currency": "USD"
         }}>
           <div className="mobile-paypal-container">
             <PayPalButtons
               style={{ 
                 layout: "vertical",
-                color: "gold",
+                color: "blue",
                 shape: "rect",
-                label: "paypal",
-                height: 55
+                label: "pay"
               }}
-              fundingSource="paypal"
               createOrder={(data, actions) => {
+                console.log("PayPal createOrder 호출됨");
                 return actions.order.create({
                   purchase_units: [
                     {
                       description: product.name,
                       amount: {
-                        value: product.price,
-                        currency_code: "USD"
-                      },
-                    },
-                  ],
-                  application_context: {
-                    shipping_preference: "NO_SHIPPING"
-                  }
+                        value: product.price
+                      }
+                    }
+                  ]
                 });
               }}
               onApprove={async (data, actions) => {
+                console.log("PayPal onApprove 호출됨", data);
                 try {
                   const order = await actions.order.capture();
-                  console.log("결제 완료, 주문 정보:", order);
+                  console.log("PayPal 결제 완료:", order);
                   
                   const response = await fetch('http://localhost:5000/api/orders', {
                     method: 'POST',
@@ -162,6 +248,7 @@ function App() {
                   });
                   
                   const result = await response.json();
+                  console.log("백엔드 응답:", result);
                   
                   if (result.success) {
                     alert(`🎉 결제 완료! ${order.payer.name.given_name}님!\n주문이 성공적으로 저장되었습니다.`);
@@ -169,21 +256,22 @@ function App() {
                     alert(`결제는 완료되었지만 주문 저장 중 오류가 발생했습니다: ${result.message}`);
                   }
                 } catch (error) {
-                  console.error('백엔드 API 호출 중 오류:', error);
-                  alert(`결제는 완료되었지만 주문 저장 중 오류가 발생했습니다.`);
+                  console.error('PayPal 결제 처리 중 오류:', error);
+                  alert(`결제 처리 중 오류가 발생했습니다: ${error.message}`);
                 }
               }}
               onError={(err) => {
-                console.error("PayPal 결제 중 에러 발생:", err);
-                alert("결제 중 오류가 발생했습니다. 다시 시도해주세요.");
+                console.error("PayPal 에러:", err);
+                alert("PayPal 결제 중 오류가 발생했습니다. 다시 시도해주세요.");
               }}
               onCancel={(data) => {
-                console.log("결제가 취소되었습니다:", data);
+                console.log("PayPal 결제 취소:", data);
                 alert("결제가 취소되었습니다.");
               }}
             />
           </div>
         </PayPalScriptProvider>
+        */}
       </div>
     </div>
   );
