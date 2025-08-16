@@ -651,6 +651,103 @@ def webhook_status():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# 테스트용 웹훅 시뮬레이션 엔드포인트 (개발용)
+@app.route('/api/webhooks/simulate', methods=['POST'])
+def simulate_webhook():
+    """
+    로컬에서 웹훅을 시뮬레이션하는 엔드포인트 (개발용)
+    """
+    try:
+        data = request.json
+        event_type = data.get('event_type', 'PAYMENT.CAPTURE.COMPLETED')
+        
+        # 시뮬레이션용 웹훅 데이터 생성
+        webhook_data = {
+            "id": f"WH-SIM-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+            "event_type": event_type,
+            "create_time": datetime.utcnow().isoformat(),
+            "resource_type": "capture",
+            "resource": {
+                "id": f"SIM-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+                "status": "COMPLETED",
+                "amount": {
+                    "currency_code": "USD",
+                    "value": "75.00"
+                },
+                "payer": {
+                    "email_address": "test@example.com"
+                }
+            }
+        }
+        
+        # 웹훅 처리 함수 직접 호출
+        result = paypal_webhook_simulation(webhook_data)
+        
+        return jsonify({
+            'success': True,
+            'message': f'웹훅 시뮬레이션 완료: {event_type}',
+            'result': result
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'웹훅 시뮬레이션 실패: {str(e)}'
+        }), 500
+
+def paypal_webhook_simulation(webhook_data):
+    """
+    웹훅 데이터를 시뮬레이션하는 함수
+    """
+    start_time = datetime.utcnow()
+    
+    try:
+        event_type = webhook_data.get('event_type')
+        event_id = webhook_data.get('id')
+        resource = webhook_data.get('resource', {})
+        
+        print(f"\n🔔 웹훅 시뮬레이션 시작")
+        print(f"   - 이벤트 타입: {event_type}")
+        print(f"   - 이벤트 ID: {event_id}")
+        
+        # 웹훅 이벤트 저장
+        webhook_event = WebhookEvent(
+            event_type=event_type,
+            event_id=event_id,
+            resource_type=resource.get('type', ''),
+            resource_id=resource.get('id', ''),
+            status=resource.get('status', ''),
+            amount=resource.get('amount', {}).get('value'),
+            currency=resource.get('amount', {}).get('currency_code'),
+            payer_email=resource.get('payer', {}).get('email_address'),
+            raw_data=json.dumps(webhook_data)
+        )
+        
+        db.session.add(webhook_event)
+        db.session.commit()
+        
+        # 이벤트 타입별 처리
+        if event_type == 'PAYMENT.CAPTURE.COMPLETED':
+            result = handle_payment_completed(resource)
+        elif event_type == 'CHECKOUT.ORDER.COMPLETED':
+            result = handle_order_completed(resource)
+        else:
+            result = "Simulated event processed"
+        
+        # 처리 완료 표시
+        webhook_event.processed = True
+        webhook_event.processing_time = (datetime.utcnow() - start_time).total_seconds()
+        db.session.commit()
+        
+        total_time = (datetime.utcnow() - start_time).total_seconds()
+        print(f"✅ 웹훅 시뮬레이션 완료: {event_type} (소요시간: {total_time:.2f}초)")
+        
+        return result
+        
+    except Exception as e:
+        print(f"❌ 웹훅 시뮬레이션 오류: {e}")
+        raise
+
 # 데이터베이스 연결 재시도 로직
 def wait_for_db():
     import time
