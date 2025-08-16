@@ -33,26 +33,7 @@ const getBackendUrl = () => {
   return 'http://localhost:5000';
 };
 
-// 배포 환경에 따른 PayPal 설정
-const getPayPalOptions = () => {
-  const baseOptions = {
-    "client-id": PAYPAL_CLIENT_ID,
-    "currency": "USD",
-    "intent": "capture"
-  };
 
-  // 프로덕션 환경에서는 추가 설정
-  if (process.env.NODE_ENV === 'production') {
-    return {
-      ...baseOptions,
-      "components": "buttons,funding-eligibility",
-      "disable-funding": "credit,card",
-      "enable-funding": "paylater,venmo"
-    };
-  }
-
-  return baseOptions;
-};
 
 function App() {
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
@@ -92,15 +73,10 @@ function App() {
       const script = document.createElement('script');
       script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&currency=USD&intent=capture`;
       script.async = true;
-      script.defer = true;
       
       script.onload = () => {
         console.log('✅ PayPal SDK 로드 완료');
         setPaypalLoaded(true);
-        // 약간의 지연 후 버튼 초기화
-        setTimeout(() => {
-          initializePayPalButtons();
-        }, 100);
       };
       
       script.onerror = (error) => {
@@ -120,7 +96,6 @@ function App() {
     try {
       if (!window.paypal) {
         console.warn('⚠️ PayPal SDK가 로드되지 않았습니다');
-        setPaypalLoaded(false);
         return;
       }
 
@@ -129,20 +104,11 @@ function App() {
         return;
       }
 
-      // 기존 버튼 제거
-      if (paypalButtons) {
-        try {
-          paypalButtons.close();
-        } catch (error) {
-          console.warn('기존 PayPal 버튼 제거 중 오류:', error);
-        }
-      }
-
+      console.log('🔄 PayPal 버튼 초기화 시작');
+      
       // 컨테이너 내용 초기화
       paypalContainerRef.current.innerHTML = '';
 
-      console.log('🔄 PayPal 버튼 초기화 시작');
-      
       // 새 버튼 생성
       const buttons = window.paypal.Buttons({
         style: {
@@ -201,7 +167,6 @@ function App() {
         console.log('✅ PayPal 버튼 렌더링 완료');
       } else {
         console.warn('⚠️ PayPal 버튼이 지원되지 않는 환경입니다');
-        setPaypalLoaded(false);
         
         // 지원되지 않는 환경에 대한 대체 메시지
         paypalContainerRef.current.innerHTML = `
@@ -223,7 +188,6 @@ function App() {
       }
     } catch (error) {
       console.error('❌ PayPal 버튼 초기화 실패:', error);
-      setPaypalLoaded(false);
       
       // 에러 발생 시 대체 메시지
       if (paypalContainerRef.current) {
@@ -299,23 +263,12 @@ function App() {
       // 백엔드 연결 테스트
       testBackendConnection();
       
-      // PayPal SDK 로드 (약간의 지연 후)
-      setTimeout(() => {
-        loadPayPalSDK();
-      }, 500);
+      // PayPal SDK 로드
+      loadPayPalSDK();
       
       return () => {
         console.log('🧹 컴포넌트 정리 시작');
         window.removeEventListener('resize', checkMobile);
-        
-        // PayPal 버튼 정리
-        if (paypalButtons) {
-          try {
-            paypalButtons.close();
-          } catch (error) {
-            console.warn('PayPal 버튼 정리 중 오류:', error);
-          }
-        }
       };
     } catch (error) {
       console.error('❌ 컴포넌트 초기화 중 오류:', error);
@@ -326,9 +279,7 @@ function App() {
   useEffect(() => {
     if (paypalLoaded && paypalContainerRef.current) {
       console.log('🔄 PayPal SDK 로드 완료, 버튼 초기화 시작');
-      setTimeout(() => {
-        initializePayPalButtons();
-      }, 200);
+      initializePayPalButtons();
     }
   }, [paypalLoaded]);
 
@@ -601,6 +552,7 @@ function App() {
             <button 
               onClick={() => {
                 console.log('PayPal SDK 재로드 시도');
+                setPaypalLoaded(false);
                 loadPayPalSDK();
               }}
               style={{
@@ -873,6 +825,7 @@ function App() {
                 <button 
                   onClick={() => {
                     console.log('PayPal SDK 재로드 시도');
+                    setPaypalLoaded(false);
                     loadPayPalSDK();
                   }}
                   style={{
