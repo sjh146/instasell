@@ -16,10 +16,22 @@ const product = {
 // 실제 서비스에서는 발급받은 본인의 Client ID로 교체해야 합니다.
 const PAYPAL_CLIENT_ID = "AYclIN8z4NgfjpWr7HIUOAip4fOM69wFvd9BKw7g1GFCkfnZcRwHaNGqQl2M0f8286oQRmUCK1qhp82k";
 
+// 백엔드 URL을 동적으로 설정
+const getBackendUrl = () => {
+  // 모바일에서 접근할 때는 실제 IP 주소를 사용
+  if (window.location.hostname !== 'localhost') {
+    // 모바일에서 접근할 때는 현재 호스트의 IP를 사용
+    return `http://${window.location.hostname}:5000`;
+  }
+  // 데스크톱에서는 localhost 사용
+  return 'http://localhost:5000';
+};
+
 function App() {
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
+  const [backendUrl, setBackendUrl] = useState(getBackendUrl());
 
   // 모바일 감지 함수
   const checkMobile = () => {
@@ -47,6 +59,59 @@ function App() {
 
   const handleInstagramClick = () => {
     window.open('https://www.instagram.com', '_blank');
+  };
+
+  // 결제 처리 함수
+  const handlePayment = async () => {
+    console.log("결제 버튼 클릭됨");
+    console.log("백엔드 URL:", backendUrl);
+    
+    try {
+      // PayPal 결제 시뮬레이션
+      const mockOrder = {
+        id: "PAY-" + Date.now(),
+        status: "COMPLETED",
+        payer: {
+          name: {
+            given_name: "테스트",
+            surname: "사용자"
+          },
+          email_address: "test@example.com"
+        },
+        purchase_units: [{
+          amount: {
+            value: product.price,
+            currency_code: "USD"
+          }
+        }]
+      };
+      
+      console.log("결제 주문:", mockOrder);
+      
+      const response = await fetch(`${backendUrl}/api/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          paypal_order: mockOrder,
+          product_name: product.name
+        })
+      });
+      
+      const result = await response.json();
+      console.log("백엔드 응답:", result);
+      
+      if (result.success) {
+        alert(`🎉 결제 완료! ${mockOrder.payer.name.given_name}님!\n주문이 성공적으로 저장되었습니다.\n주문 ID: ${mockOrder.id}`);
+      } else {
+        alert(`결제는 완료되었지만 주문 저장 중 오류가 발생했습니다: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('결제 처리 중 오류:', error);
+      console.error('백엔드 URL:', backendUrl);
+      alert(`결제 처리 중 오류가 발생했습니다: ${error.message}\n백엔드 URL: ${backendUrl}`);
+    }
   };
 
   // 모바일 전용 컴포넌트
@@ -114,54 +179,7 @@ function App() {
         {/* 간단한 결제 버튼 (PayPal 대안) */}
         <div style={{ marginBottom: '20px', textAlign: 'center' }}>
           <button 
-            onClick={async () => {
-              console.log("결제 버튼 클릭됨");
-              try {
-                // PayPal 결제 시뮬레이션
-                const mockOrder = {
-                  id: "PAY-" + Date.now(),
-                  status: "COMPLETED",
-                  payer: {
-                    name: {
-                      given_name: "테스트",
-                      surname: "사용자"
-                    },
-                    email_address: "test@example.com"
-                  },
-                  purchase_units: [{
-                    amount: {
-                      value: product.price,
-                      currency_code: "USD"
-                    }
-                  }]
-                };
-                
-                console.log("결제 주문:", mockOrder);
-                
-                const response = await fetch('http://localhost:5000/api/orders', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    paypal_order: mockOrder,
-                    product_name: product.name
-                  })
-                });
-                
-                const result = await response.json();
-                console.log("백엔드 응답:", result);
-                
-                if (result.success) {
-                  alert(`🎉 결제 완료! ${mockOrder.payer.name.given_name}님!\n주문이 성공적으로 저장되었습니다.\n주문 ID: ${mockOrder.id}`);
-                } else {
-                  alert(`결제는 완료되었지만 주문 저장 중 오류가 발생했습니다: ${result.message}`);
-                }
-              } catch (error) {
-                console.error('결제 처리 중 오류:', error);
-                alert(`결제 처리 중 오류가 발생했습니다: ${error.message}`);
-              }
-            }}
+            onClick={handlePayment}
             style={{
               padding: '16px 32px',
               backgroundColor: '#0070ba',
