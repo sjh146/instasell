@@ -697,7 +697,7 @@ def simulate_webhook():
 
 def paypal_webhook_simulation(webhook_data):
     """
-    웹훅 데이터를 시뮬레이션하는 함수
+    웹훅 데이터를 시뮬레이션하는 함수 (기존 웹훅 처리 로직 재사용)
     """
     start_time = datetime.utcnow()
     
@@ -709,6 +709,12 @@ def paypal_webhook_simulation(webhook_data):
         print(f"\n🔔 웹훅 시뮬레이션 시작")
         print(f"   - 이벤트 타입: {event_type}")
         print(f"   - 이벤트 ID: {event_id}")
+        
+        # 중복 이벤트 확인
+        existing_event = WebhookEvent.query.filter_by(event_id=event_id).first()
+        if existing_event:
+            print(f"⚠️ 중복 웹훅 이벤트: {event_id}")
+            return "Duplicate event"
         
         # 웹훅 이벤트 저장
         webhook_event = WebhookEvent(
@@ -726,18 +732,42 @@ def paypal_webhook_simulation(webhook_data):
         db.session.add(webhook_event)
         db.session.commit()
         
-        # 이벤트 타입별 처리
-        if event_type == 'PAYMENT.CAPTURE.COMPLETED':
-            result = handle_payment_completed(resource)
-        elif event_type == 'CHECKOUT.ORDER.COMPLETED':
-            result = handle_order_completed(resource)
-        else:
-            result = "Simulated event processed"
-        
-        # 처리 완료 표시
-        webhook_event.processed = True
-        webhook_event.processing_time = (datetime.utcnow() - start_time).total_seconds()
-        db.session.commit()
+        # 기존 웹훅 처리 로직 재사용
+        try:
+            if event_type == 'PAYMENT.CAPTURE.COMPLETED':
+                result = handle_payment_completed(resource)
+                print(f"✅ 결제 완료 처리: {result}")
+            elif event_type == 'PAYMENT.CAPTURE.DENIED':
+                result = handle_payment_denied(resource)
+                print(f"❌ 결제 거부 처리: {result}")
+            elif event_type == 'PAYMENT.CAPTURE.REFUNDED':
+                result = handle_payment_refunded(resource)
+                print(f"🔄 환불 처리: {result}")
+            elif event_type == 'CHECKOUT.ORDER.COMPLETED':
+                result = handle_order_completed(resource)
+                print(f"✅ 주문 완료 처리: {result}")
+            elif event_type == 'PAYMENT.CAPTURE.PENDING':
+                result = handle_payment_pending(resource)
+                print(f"⏳ 결제 대기 처리: {result}")
+            elif event_type == 'PAYMENT.CAPTURE.REVERSED':
+                result = handle_payment_reversed(resource)
+                print(f"🔄 결제 취소 처리: {result}")
+            else:
+                print(f"📝 처리되지 않은 이벤트 타입: {event_type}")
+                result = "Unhandled event type"
+            
+            # 처리 완료 표시
+            webhook_event.processed = True
+            webhook_event.processing_time = (datetime.utcnow() - start_time).total_seconds()
+            db.session.commit()
+            
+        except Exception as e:
+            print(f"❌ 이벤트 처리 중 오류: {e}")
+            webhook_event.processed = False
+            webhook_event.error_message = str(e)
+            webhook_event.processing_time = (datetime.utcnow() - start_time).total_seconds()
+            db.session.commit()
+            raise
         
         total_time = (datetime.utcnow() - start_time).total_seconds()
         print(f"✅ 웹훅 시뮬레이션 완료: {event_type} (소요시간: {total_time:.2f}초)")

@@ -510,14 +510,22 @@
             }
         }
 
-        // 웹훅 상태 불러오기
+        // 웹훅 상태 불러오기 (통합)
         async function loadWebhookStatus() {
             try {
-                const response = await fetch('/api/webhooks/status');
-                const data = await response.json();
+                // 웹훅 상태 API 호출
+                const statusResponse = await fetch('/api/webhooks/status');
+                const statusData = await statusResponse.json();
                 
-                if (data.success) {
-                    const status = data.status;
+                if (statusData.success) {
+                    const status = statusData.status;
+                    
+                    // 상단 웹훅 상태 카드 업데이트
+                    document.getElementById('webhook-status').textContent = status.system;
+                    document.getElementById('recent-webhooks').textContent = status.recent_webhooks_1h;
+                    document.getElementById('unprocessed-events').textContent = status.unprocessed_events;
+                    
+                    // 하단 PayPal 웹훅 모니터링 카드 업데이트
                     document.getElementById('system-status').textContent = status.system;
                     document.getElementById('recent-count').textContent = status.recent_webhooks_1h;
                     document.getElementById('unprocessed-count').textContent = status.unprocessed_events;
@@ -529,26 +537,17 @@
                         document.getElementById('last-webhook-time').textContent = '없음';
                     }
                 }
-            } catch (error) {
-                console.error('웹훅 상태 로드 실패:', error);
-            }
-        }
-
-        // 웹훅 통계 불러오기
-        async function loadWebhookStats() {
-            try {
-                const response = await fetch('/api/webhooks/stats');
-                const data = await response.json();
                 
-                if (data.success) {
-                    const stats = data.stats;
-                    document.getElementById('webhook-status').textContent = stats.total_events;
-                    document.getElementById('recent-webhooks').textContent = stats.recent_events_24h;
-                    document.getElementById('unprocessed-events').textContent = stats.unprocessed_events;
+                // 웹훅 통계 API 호출 (평균 처리 시간 등)
+                const statsResponse = await fetch('/api/webhooks/stats');
+                const statsData = await statsResponse.json();
+                
+                if (statsData.success) {
+                    const stats = statsData.stats;
                     document.getElementById('avg-processing-time').textContent = `${stats.avg_processing_time.toFixed(2)}s`;
                 }
             } catch (error) {
-                console.error('웹훅 통계 로드 실패:', error);
+                console.error('웹훅 상태 로드 실패:', error);
             }
         }
 
@@ -619,6 +618,13 @@
                 alert(`웹훅 테스트 실패: ${error.message}`);
             }
         }
+
+        // 페이지 로드 시 초기 데이터 불러오기
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStats();
+            loadWebhookStatus();
+            loadWebhookEvents();
+        });
 
         // 30초마다 상태 새로고침
         setInterval(() => {
