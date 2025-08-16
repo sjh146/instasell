@@ -19,6 +19,7 @@ const PAYPAL_CLIENT_ID = "AYclIN8z4NgfjpWr7HIUOAip4fOM69wFvd9BKw7g1GFCkfnZcRwHaN
 function App() {
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isLiked, setIsLiked] = useState(false);
 
   // 모바일 감지 함수
   const checkMobile = () => {
@@ -40,13 +41,43 @@ function App() {
     setIsVideoPlaying(true);
   };
 
+  const handleLikeClick = () => {
+    setIsLiked(!isLiked);
+  };
+
+  const handleInstagramClick = () => {
+    window.open('https://www.instagram.com', '_blank');
+  };
+
   // 모바일 전용 컴포넌트
   const MobileView = () => (
     <div className="mobile-container">
       <div className="mobile-header">
-        <div className="mobile-user-info">
-          <div className="mobile-profile-pic">👤</div>
-          <span className="mobile-username">dogunnny</span>
+        <div className="mobile-header-left">
+          <div className="mobile-user-info">
+            <div className="mobile-profile-pic">👤</div>
+            <span className="mobile-username">dogunnny</span>
+          </div>
+        </div>
+        
+        <div className="mobile-header-center">
+          <div className="instagram-logo" onClick={handleInstagramClick}>
+            Instagram
+          </div>
+        </div>
+        
+        <div className="mobile-header-right">
+          <div className="mobile-action-buttons">
+            <button 
+              className={`mobile-like-button ${isLiked ? 'liked' : ''}`}
+              onClick={handleLikeClick}
+            >
+              {isLiked ? '❤️' : '🤍'}
+            </button>
+            <button className="mobile-message-button">
+              ✈️
+            </button>
+          </div>
         </div>
       </div>
 

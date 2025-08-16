@@ -744,6 +744,27 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
+  height: 60px;
+}
+
+.mobile-header-left {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.mobile-header-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-header-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .mobile-user-info {
@@ -767,6 +788,63 @@ body {
   color: #ffffff;
   font-weight: 600;
   font-size: 14px;
+}
+
+.instagram-logo {
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+  font-family: 'Instagram Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.instagram-logo:hover {
+  opacity: 0.8;
+}
+
+.mobile-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.mobile-like-button,
+.mobile-message-button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+}
+
+.mobile-like-button:hover,
+.mobile-message-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  transform: scale(1.1);
+}
+
+.mobile-like-button.liked {
+  animation: likeAnimation 0.3s ease;
+}
+
+@keyframes likeAnimation {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .mobile-video-section {
