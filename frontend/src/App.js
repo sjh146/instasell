@@ -33,8 +33,6 @@ const getBackendUrl = () => {
   return 'http://localhost:5000';
 };
 
-
-
 function App() {
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -42,7 +40,6 @@ function App() {
   const [backendUrl, setBackendUrl] = useState(getBackendUrl());
   const [isLoading, setIsLoading] = useState(true);
   const [paypalLoaded, setPaypalLoaded] = useState(false);
-  const [paypalButtons, setPaypalButtons] = useState(null);
   const paypalContainerRef = useRef(null);
 
   // 모바일 감지 함수
@@ -55,61 +52,43 @@ function App() {
 
   // PayPal SDK 로드
   const loadPayPalSDK = () => {
-    try {
-      // 이미 로드된 경우
-      if (window.paypal) {
-        console.log('✅ PayPal SDK 이미 로드됨');
-        setPaypalLoaded(true);
-        return;
-      }
-
-      // 이미 로딩 중인 경우
-      if (document.querySelector('script[src*="paypal.com/sdk"]')) {
-        console.log('⚠️ PayPal SDK 로딩 중...');
-        return;
-      }
-
-      console.log('🔄 PayPal SDK 로드 시작');
-      const script = document.createElement('script');
-      script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&currency=USD&intent=capture`;
-      script.async = true;
-      
-      script.onload = () => {
-        console.log('✅ PayPal SDK 로드 완료');
-        setPaypalLoaded(true);
-      };
-      
-      script.onerror = (error) => {
-        console.error('❌ PayPal SDK 로드 실패:', error);
-        setPaypalLoaded(false);
-      };
-      
-      document.head.appendChild(script);
-    } catch (error) {
-      console.error('❌ PayPal SDK 로드 중 예외 발생:', error);
-      setPaypalLoaded(false);
+    if (window.paypal) {
+      console.log('✅ PayPal SDK 이미 로드됨');
+      setPaypalLoaded(true);
+      return;
     }
+
+    console.log('🔄 PayPal SDK 로드 시작');
+    const script = document.createElement('script');
+    script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&currency=USD&intent=capture`;
+    script.async = true;
+    
+    script.onload = () => {
+      console.log('✅ PayPal SDK 로드 완료');
+      setPaypalLoaded(true);
+    };
+    
+    script.onerror = () => {
+      console.error('❌ PayPal SDK 로드 실패');
+      setPaypalLoaded(false);
+    };
+    
+    document.head.appendChild(script);
   };
 
   // PayPal 버튼 초기화
   const initializePayPalButtons = () => {
+    if (!window.paypal || !paypalContainerRef.current) {
+      console.log('PayPal SDK 또는 컨테이너가 준비되지 않음');
+      return;
+    }
+
+    console.log('🔄 PayPal 버튼 초기화 시작');
+    
+    // 컨테이너 내용 초기화
+    paypalContainerRef.current.innerHTML = '';
+
     try {
-      if (!window.paypal) {
-        console.warn('⚠️ PayPal SDK가 로드되지 않았습니다');
-        return;
-      }
-
-      if (!paypalContainerRef.current) {
-        console.warn('⚠️ PayPal 컨테이너가 준비되지 않았습니다');
-        return;
-      }
-
-      console.log('🔄 PayPal 버튼 초기화 시작');
-      
-      // 컨테이너 내용 초기화
-      paypalContainerRef.current.innerHTML = '';
-
-      // 새 버튼 생성
       const buttons = window.paypal.Buttons({
         style: {
           layout: 'vertical',
@@ -142,13 +121,7 @@ function App() {
             await handlePayPalPayment(order);
           } catch (error) {
             console.error('PayPal 결제 처리 중 오류:', error);
-            if (error.message.includes('PAYMENT_ALREADY_DONE')) {
-              alert('이미 처리된 결제입니다.');
-            } else if (error.message.includes('PAYMENT_DENIED')) {
-              alert('결제가 거부되었습니다. 다시 시도해주세요.');
-            } else {
-              alert(`PayPal 결제 처리 중 오류가 발생했습니다: ${error.message}`);
-            }
+            alert(`PayPal 결제 처리 중 오류가 발생했습니다: ${error.message}`);
           }
         },
         onError: (err) => {
@@ -163,51 +136,24 @@ function App() {
 
       if (buttons.isEligible()) {
         buttons.render(paypalContainerRef.current);
-        setPaypalButtons(buttons);
         console.log('✅ PayPal 버튼 렌더링 완료');
       } else {
         console.warn('⚠️ PayPal 버튼이 지원되지 않는 환경입니다');
-        
-        // 지원되지 않는 환경에 대한 대체 메시지
         paypalContainerRef.current.innerHTML = `
-          <div style="
-            padding: 16px;
-            background-color: rgba(255, 255, 0, 0.1);
-            border: 1px solid rgba(255, 255, 0, 0.3);
-            border-radius: 8px;
-            text-align: center;
-            color: #ffff00;
-            font-size: 14px;
-          ">
+          <div style="padding: 16px; background-color: rgba(255, 255, 0, 0.1); border-radius: 8px; text-align: center; color: #ffff00;">
             <div>⚠️ PayPal이 지원되지 않는 환경입니다</div>
-            <div style="margin-top: 8px; font-size: 12px;">
-              다른 브라우저나 기기에서 시도해주세요
-            </div>
+            <div style="margin-top: 8px; font-size: 12px;">다른 브라우저나 기기에서 시도해주세요</div>
           </div>
         `;
       }
     } catch (error) {
       console.error('❌ PayPal 버튼 초기화 실패:', error);
-      
-      // 에러 발생 시 대체 메시지
-      if (paypalContainerRef.current) {
-        paypalContainerRef.current.innerHTML = `
-          <div style="
-            padding: 16px;
-            background-color: rgba(255, 0, 0, 0.1);
-            border: 1px solid rgba(255, 0, 0, 0.3);
-            border-radius: 8px;
-            text-align: center;
-            color: #ff0000;
-            font-size: 14px;
-          ">
-            <div>❌ PayPal 초기화 실패</div>
-            <div style="margin-top: 8px; font-size: 12px;">
-              ${error.message}
-            </div>
-          </div>
-        `;
-      }
+      paypalContainerRef.current.innerHTML = `
+        <div style="padding: 16px; background-color: rgba(255, 0, 0, 0.1); border-radius: 8px; text-align: center; color: #ff0000;">
+          <div>❌ PayPal 초기화 실패</div>
+          <div style="margin-top: 8px; font-size: 12px;">${error.message}</div>
+        </div>
+      `;
     }
   };
 
@@ -254,25 +200,20 @@ function App() {
 
   // 컴포넌트 마운트 시 초기화
   useEffect(() => {
-    try {
-      console.log('🔄 컴포넌트 초기화 시작');
-      
-      checkMobile();
-      window.addEventListener('resize', checkMobile);
-      
-      // 백엔드 연결 테스트
-      testBackendConnection();
-      
-      // PayPal SDK 로드
-      loadPayPalSDK();
-      
-      return () => {
-        console.log('🧹 컴포넌트 정리 시작');
-        window.removeEventListener('resize', checkMobile);
-      };
-    } catch (error) {
-      console.error('❌ 컴포넌트 초기화 중 오류:', error);
-    }
+    console.log('🔄 컴포넌트 초기화 시작');
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    // 백엔드 연결 테스트
+    testBackendConnection();
+    
+    // PayPal SDK 로드
+    loadPayPalSDK();
+    
+    return () => {
+      window.removeEventListener('resize', checkMobile);
+    };
   }, []);
 
   // PayPal SDK 로드 완료 시 버튼 초기화
@@ -627,6 +568,7 @@ function App() {
             <div>백엔드: {backendUrl}</div>
             <div>연결 상태: {isLoading ? '확인 중...' : '연결됨'}</div>
             <div>네트워크: {navigator.onLine ? '온라인' : '오프라인'}</div>
+            <div>PayPal 로드: {paypalLoaded ? '완료' : '로딩 중'}</div>
           </div>
         )}
       </div>
@@ -933,4 +875,3 @@ function App() {
 }
 
 export default App;
-
