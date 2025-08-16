@@ -65,6 +65,72 @@ docker compose ps
 - 5432: PostgreSQL (선택사항)
 - 6379: Redis (선택사항)
 
+#### Windows 방화벽 설정
+```powershell
+# Windows 방화벽에서 포트 열기
+netsh advfirewall firewall add rule name="React Frontend" dir=in action=allow protocol=TCP localport=3000
+netsh advfirewall firewall add rule name="Flask Backend" dir=in action=allow protocol=TCP localport=5000
+```
+
+#### Linux 방화벽 설정
+```bash
+# UFW (Ubuntu)
+sudo ufw allow 3000
+sudo ufw allow 5000
+
+# iptables
+sudo iptables -A INPUT -p tcp --dport 3000 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 5000 -j ACCEPT
+```
+
+#### 외부 접속을 위한 추가 설정
+```bash
+# 서버 IP 확인
+ipconfig  # Windows
+ifconfig  # Linux/Mac
+
+# Docker 컨테이너가 모든 인터페이스에서 접근 가능한지 확인
+docker compose ps
+```
+
+### 6.1. 외부 모바일 접속 문제 해결
+
+#### CORS 설정 확인
+백엔드에서 모든 도메인에서의 요청을 허용하도록 설정되어 있습니다:
+```python
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+        "supports_credentials": True
+    }
+})
+```
+
+#### 네트워크 연결 테스트
+```bash
+# 서버에서 백엔드 연결 테스트
+curl http://localhost:5000/health
+
+# 외부에서 백엔드 연결 테스트
+curl http://서버IP:5000/health
+```
+
+#### 모바일에서 접속 시 확인사항
+1. **서버 IP 주소 확인**: `ipconfig` 또는 `ifconfig`로 서버 IP 확인
+2. **방화벽 설정**: 포트 3000, 5000이 열려있는지 확인
+3. **네트워크 연결**: 모바일과 서버가 같은 네트워크에 있는지 확인
+4. **브라우저 콘솔**: 개발자 도구에서 네트워크 오류 확인
+
+#### 환경 변수 설정 (외부 접속용)
+```env
+# 외부 접속을 위한 환경 변수
+REACT_APP_BACKEND_URL=http://서버IP:5000
+REACT_APP_BACKEND_PORT=5000
+NODE_ENV=production
+```
+
 ### 7. PayPal 설정
 
 #### PayPal 개발자 계정 설정

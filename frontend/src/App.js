@@ -86,26 +86,96 @@ function App() {
   // 백엔드 연결 테스트
   const testBackendConnection = async () => {
     try {
+      console.log('백엔드 연결 테스트 시작:', backendUrl);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10초 타임아웃
+      
       const response = await fetch(`${backendUrl}/health`, {
         method: 'GET',
-        timeout: 5000
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+        }
       });
       
+      clearTimeout(timeoutId);
+      
       if (response.ok) {
-        console.log('백엔드 연결 성공:', backendUrl);
+        console.log('✅ 백엔드 연결 성공:', backendUrl);
       } else {
-        console.warn('백엔드 응답 오류:', response.status);
+        console.warn('⚠️ 백엔드 응답 오류:', response.status);
       }
     } catch (error) {
-      console.error('백엔드 연결 실패:', error);
+      console.error('❌ 백엔드 연결 실패:', error);
+      
       // 백엔드 연결 실패 시 대체 URL 시도
-      if (backendUrl.includes('localhost')) {
-        const fallbackUrl = `http://${window.location.hostname}:5000`;
-        console.log('대체 백엔드 URL 시도:', fallbackUrl);
-        setBackendUrl(fallbackUrl);
+      if (backendUrl.includes('localhost') || backendUrl.includes('127.0.0.1')) {
+        const currentHost = window.location.hostname;
+        const currentProtocol = window.location.protocol;
+        const fallbackUrl = `${currentProtocol}//${currentHost}:5000`;
+        
+        if (fallbackUrl !== backendUrl) {
+          console.log('🔄 대체 백엔드 URL 시도:', fallbackUrl);
+          setBackendUrl(fallbackUrl);
+          
+          // 재시도
+          setTimeout(() => {
+            testBackendConnection();
+          }, 1000);
+          return;
+        }
       }
+      
+      // 모든 시도 실패 시 사용자에게 알림
+      console.error('모든 백엔드 연결 시도 실패');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // PayPal 결제 처리 개선
+  const handlePayPalPayment = async (order) => {
+    try {
+      console.log('PayPal 결제 처리 시작:', order);
+      console.log('백엔드 URL:', backendUrl);
+      
+      const response = await fetch(`${backendUrl}/api/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          paypal_order: order,
+          product_name: product.name
+        })
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+      }
+      
+      const result = await response.json();
+      console.log("✅ 백엔드 응답:", result);
+      
+      if (result.success) {
+        alert(`🎉 PayPal 결제 완료! ${order.payer.name.given_name}님!\n주문이 성공적으로 저장되었습니다.\n주문 ID: ${order.id}`);
+      } else {
+        alert(`PayPal 결제는 완료되었지만 주문 저장 중 오류가 발생했습니다: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('❌ PayPal 결제 처리 중 오류:', error);
+      console.error('백엔드 URL:', backendUrl);
+      
+      // 네트워크 오류인 경우 사용자에게 안내
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        alert(`🌐 네트워크 연결 오류입니다.\n\n백엔드 서버가 실행 중인지 확인해주세요.\n백엔드 URL: ${backendUrl}\n\n다른 기기에서 접속하는 경우:\n1. 서버 IP 주소 확인\n2. 방화벽 설정 확인\n3. 포트 5000이 열려있는지 확인`);
+      } else if (error.name === 'AbortError') {
+        alert(`⏰ 요청 시간 초과입니다.\n\n네트워크 연결을 확인하고 다시 시도해주세요.\n백엔드 URL: ${backendUrl}`);
+      } else {
+        alert(`❌ PayPal 결제 처리 중 오류가 발생했습니다:\n${error.message}\n\n백엔드 URL: ${backendUrl}`);
+      }
     }
   };
 
@@ -291,36 +361,16 @@ function App() {
                   const order = await actions.order.capture();
                   console.log("PayPal 결제 완료:", order);
                   
-                  const response = await fetch(`${backendUrl}/api/orders`, {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                      paypal_order: order,
-                      product_name: product.name
-                    })
-                  });
-                  
-                  if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                  }
-                  
-                  const result = await response.json();
-                  console.log("백엔드 응답:", result);
-                  
-                  if (result.success) {
-                    alert(`🎉 PayPal 결제 완료! ${order.payer.name.given_name}님!\n주문이 성공적으로 저장되었습니다.\n주문 ID: ${order.id}`);
-                  } else {
-                    alert(`PayPal 결제는 완료되었지만 주문 저장 중 오류가 발생했습니다: ${result.message}`);
-                  }
+                  await handlePayPalPayment(order);
                 } catch (error) {
                   console.error('PayPal 결제 처리 중 오류:', error);
                   console.error('백엔드 URL:', backendUrl);
                   
-                  // 네트워크 오류인 경우 사용자에게 안내
-                  if (error.name === 'TypeError' && error.message.includes('fetch')) {
-                    alert(`네트워크 연결 오류입니다.\n백엔드 서버가 실행 중인지 확인해주세요.\n백엔드 URL: ${backendUrl}`);
+                  // PayPal 자체 오류인 경우
+                  if (error.message.includes('PAYMENT_ALREADY_DONE')) {
+                    alert('이미 처리된 결제입니다.');
+                  } else if (error.message.includes('PAYMENT_DENIED')) {
+                    alert('결제가 거부되었습니다. 다시 시도해주세요.');
                   } else {
                     alert(`PayPal 결제 처리 중 오류가 발생했습니다: ${error.message}`);
                   }
@@ -370,6 +420,26 @@ function App() {
             <div>개발 모드</div>
             <div>백엔드 URL: {backendUrl}</div>
             <div>PayPal Client ID: {PAYPAL_CLIENT_ID.substring(0, 10)}...</div>
+            <div>현재 호스트: {window.location.hostname}</div>
+            <div>현재 프로토콜: {window.location.protocol}</div>
+          </div>
+        )}
+        
+        {/* 모바일 네트워크 상태 표시 */}
+        {isMobile && (
+          <div style={{ 
+            marginTop: '10px', 
+            padding: '8px', 
+            backgroundColor: 'rgba(255, 255, 0, 0.1)', 
+            borderRadius: '4px',
+            textAlign: 'center',
+            color: '#ffff00',
+            fontSize: '10px'
+          }}>
+            <div>📱 모바일 모드</div>
+            <div>백엔드: {backendUrl}</div>
+            <div>연결 상태: {isLoading ? '확인 중...' : '연결됨'}</div>
+            <div>네트워크: {navigator.onLine ? '온라인' : '오프라인'}</div>
           </div>
         )}
       </div>
