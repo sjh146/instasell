@@ -122,8 +122,8 @@ class Order(db.Model):
             'postal_code': self.postal_code,
             'country_code': self.country_code,
             'payment_status': self.payment_status,
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat()
+            'created_at': utc_to_kst(self.created_at).isoformat(),
+            'updated_at': utc_to_kst(self.updated_at).isoformat()
         }
 
 # PayPal 웹훅 시크릿 (실제 환경에서는 환경 변수로 관리)
@@ -160,11 +160,15 @@ class WebhookEvent(db.Model):
     amount = db.Column(db.String(20))
     currency = db.Column(db.String(10))
     payer_email = db.Column(db.String(100))
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=True)  # 연결된 주문 ID
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     raw_data = db.Column(db.Text)  # 전체 웹훅 데이터 저장
     processed = db.Column(db.Boolean, default=False)  # 처리 완료 여부
     processing_time = db.Column(db.Float)  # 처리 시간 (초)
     error_message = db.Column(db.Text)  # 에러 메시지
+    
+    # 관계 설정
+    order = db.relationship('Order', backref='webhook_events')
 
     def __repr__(self):
         return f'<WebhookEvent {self.event_type}:{self.event_id}>'
@@ -180,10 +184,12 @@ class WebhookEvent(db.Model):
             'amount': self.amount,
             'currency': self.currency,
             'payer_email': self.payer_email,
+            'order_id': self.order_id,
             'created_at': utc_to_kst(self.created_at).isoformat(),
             'processed': self.processed,
             'processing_time': self.processing_time,
-            'error_message': self.error_message
+            'error_message': self.error_message,
+            'has_order': self.order is not None
         }
 
 # PayPal 웹훅 검증 함수
@@ -485,6 +491,65 @@ def get_webhook_events():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# 웹훅 이벤트의 주문 상세 정보 조회 엔드포인트
+@app.route('/api/webhooks/events/<int:event_id>/order', methods=['GET'])
+@login_required
+def get_webhook_event_order(event_id):
+    """웹훅 이벤트에 연결된 주문 상세 정보 조회"""
+    try:
+        webhook_event = WebhookEvent.query.get_or_404(event_id)
+        
+        if not webhook_event.order:
+            return jsonify({
+                'success': False,
+                'error': 'No order associated with this webhook event'
+            }), 404
+        
+        order = webhook_event.order
+        
+        # 주소 정보 포맷팅
+        address_parts = []
+        if order.address_line1:
+            address_parts.append(order.address_line1)
+        if order.address_line2:
+            address_parts.append(order.address_line2)
+        if order.city:
+            address_parts.append(order.city)
+        if order.state:
+            address_parts.append(order.state)
+        if order.postal_code:
+            address_parts.append(order.postal_code)
+        if order.country_code:
+            address_parts.append(order.country_code)
+        
+        formatted_address = ', '.join(address_parts) if address_parts else '주소 정보 없음'
+        
+        return jsonify({
+            'success': True,
+            'order': {
+                'id': order.id,
+                'paypal_order_id': order.paypal_order_id,
+                'product_name': order.product_name,
+                'amount': order.amount,
+                'currency': order.currency,
+                'buyer_name': order.buyer_name,
+                'buyer_email': order.buyer_email,
+                'address_line1': order.address_line1,
+                'address_line2': order.address_line2,
+                'city': order.city,
+                'state': order.state,
+                'postal_code': order.postal_code,
+                'country_code': order.country_code,
+                'formatted_address': formatted_address,
+                'payment_status': order.payment_status,
+                'created_at': order.created_at,
+                'updated_at': order.updated_at
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 # 웹훅 통계 엔드포인트
 @app.route('/api/webhooks/stats', methods=['GET'])
 @login_required
@@ -744,6 +809,14 @@ def paypal_webhook_simulation(webhook_data):
             payer_email=resource.get('payer', {}).get('email_address'),
             raw_data=json.dumps(webhook_data)
         )
+        
+        # 연결된 주문 찾기 (PayPal Order ID로 매칭)
+        paypal_order_id = resource.get('id')
+        if paypal_order_id:
+            order = Order.query.filter_by(paypal_order_id=paypal_order_id).first()
+            if order:
+                webhook_event.order_id = order.id
+                print(f"🔗 웹훅 이벤트를 주문과 연결: Order ID {order.id}")
         
         db.session.add(webhook_event)
         db.session.commit()

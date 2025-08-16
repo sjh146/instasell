@@ -271,6 +271,23 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            transition: all 0.3s ease;
+        }
+        
+        .event-item.clickable {
+            cursor: pointer;
+            border-left: 4px solid #28a745;
+        }
+        
+        .event-item.clickable:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            background: #f8f9fa;
+        }
+        
+        .order-indicator {
+            margin-left: 8px;
+            font-size: 14px;
         }
 
         .event-item:last-child {
@@ -326,6 +343,131 @@
             padding: 15px;
             border-radius: 10px;
             margin: 10px 0;
+        }
+
+        /* 모달 스타일 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 0;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border-radius: 10px 10px 0 0;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+
+        .close {
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        .close:hover {
+            color: #f0f0f0;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .order-section {
+            margin-bottom: 25px;
+        }
+
+        .order-section h3 {
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 8px;
+            margin-bottom: 15px;
+        }
+
+        .order-info {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .info-row {
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-row.full-width {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 5px;
+        }
+
+        .label {
+            font-weight: bold;
+            color: #555;
+            min-width: 120px;
+            flex-shrink: 0;
+        }
+
+        .value {
+            color: #333;
+            flex: 1;
+        }
+
+        .address-full {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            border-left: 3px solid #667eea;
+            font-weight: 500;
+        }
+
+        .status-completed {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .status-pending {
+            color: #ffc107;
+            font-weight: bold;
+        }
+
+        .status-failed {
+            color: #dc3545;
+            font-weight: bold;
         }
 
         @media (max-width: 768px) {
@@ -485,6 +627,13 @@
         </div>
     </div>
 
+    <!-- 주문 상세 정보 모달 -->
+    <div id="orderModal" class="modal">
+        <div class="modal-content" id="orderModalContent">
+            <!-- 모달 내용은 JavaScript로 동적 생성 -->
+        </div>
+    </div>
+
     <script>
         // 페이지 로드 시 데이터 불러오기
         document.addEventListener('DOMContentLoaded', function() {
@@ -575,9 +724,14 @@
                     }
                     
                     const eventsHtml = data.events.map(event => `
-                        <div class="event-item">
+                        <div class="event-item ${event.has_order ? 'clickable' : ''}" 
+                             ${event.has_order ? `onclick="showOrderDetails(${event.id})"` : ''}
+                             title="${event.has_order ? '클릭하여 주문 상세 정보 보기' : '연결된 주문이 없습니다'}">
                             <div class="event-info">
-                                <div class="event-type">${event.event_type}</div>
+                                <div class="event-type">
+                                    ${event.event_type}
+                                    ${event.has_order ? '<span class="order-indicator">📦</span>' : ''}
+                                </div>
                                 <div class="event-details">
                                     ID: ${event.event_id} | 
                                     ${event.amount ? `$${event.amount} ${event.currency}` : 'N/A'} | 
@@ -646,6 +800,155 @@
         setInterval(() => {
             loadWebhookStatus();
         }, 30000);
+
+        // 웹훅 이벤트 클릭 시 주문 상세 정보 표시
+        async function showOrderDetails(eventId) {
+            try {
+                const response = await fetch(`/api/webhooks/events/${eventId}/order`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    showOrderModal(data.order);
+                } else {
+                    alert('주문 정보를 찾을 수 없습니다.');
+                }
+            } catch (error) {
+                alert(`주문 정보 로드 실패: ${error.message}`);
+            }
+        }
+
+        // 주문 상세 정보 모달 표시
+        function showOrderModal(order) {
+            const modal = document.getElementById('orderModal');
+            const modalContent = document.getElementById('orderModalContent');
+            
+            modalContent.innerHTML = `
+                <div class="modal-header">
+                    <h2>주문 상세 정보</h2>
+                    <span class="close" onclick="closeOrderModal()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="order-section">
+                        <h3>주문 정보</h3>
+                        <div class="order-info">
+                            <div class="info-row">
+                                <span class="label">주문 ID:</span>
+                                <span class="value">${order.id}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">PayPal 주문 ID:</span>
+                                <span class="value">${order.paypal_order_id}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">상품명:</span>
+                                <span class="value">${order.product_name}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">금액:</span>
+                                <span class="value">$${order.amount} ${order.currency}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">결제 상태:</span>
+                                <span class="value status-${order.payment_status}">${order.payment_status}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="order-section">
+                        <h3>구매자 정보</h3>
+                        <div class="order-info">
+                            <div class="info-row">
+                                <span class="label">이름:</span>
+                                <span class="value">${order.buyer_name}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">이메일:</span>
+                                <span class="value">${order.buyer_email}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="order-section">
+                        <h3>배송 주소</h3>
+                        <div class="order-info">
+                            <div class="info-row">
+                                <span class="label">주소 1:</span>
+                                <span class="value">${order.address_line1 || '없음'}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">주소 2:</span>
+                                <span class="value">${order.address_line2 || '없음'}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">도시:</span>
+                                <span class="value">${order.city || '없음'}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">주/도:</span>
+                                <span class="value">${order.state || '없음'}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">우편번호:</span>
+                                <span class="value">${order.postal_code || '없음'}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">국가:</span>
+                                <span class="value">${order.country_code || '없음'}</span>
+                            </div>
+                            <div class="info-row full-width">
+                                <span class="label">전체 주소:</span>
+                                <span class="value address-full">${order.formatted_address}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="order-section">
+                        <h3>시간 정보</h3>
+                        <div class="order-info">
+                            <div class="info-row">
+                                <span class="label">생성 시간:</span>
+                                <span class="value">${new Date(order.created_at).toLocaleString('ko-KR', {
+                                    year: 'numeric',
+                                    month: '2-digit',
+                                    day: '2-digit',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit',
+                                    timeZone: 'Asia/Seoul'
+                                })}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">수정 시간:</span>
+                                <span class="value">${new Date(order.updated_at).toLocaleString('ko-KR', {
+                                    year: 'numeric',
+                                    month: '2-digit',
+                                    day: '2-digit',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit',
+                                    timeZone: 'Asia/Seoul'
+                                })}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            modal.style.display = 'block';
+        }
+
+        // 주문 모달 닫기
+        function closeOrderModal() {
+            document.getElementById('orderModal').style.display = 'none';
+        }
+
+        // 모달 외부 클릭 시 닫기
+        window.onclick = function(event) {
+            const modal = document.getElementById('orderModal');
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        }
     </script>
 </body>
 </html>
