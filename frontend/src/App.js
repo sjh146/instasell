@@ -176,40 +176,19 @@ function App() {
           <span className="mobile-usd-price">(USD ${product.price})</span>
         </div>
         
-        {/* 간단한 결제 버튼 (PayPal 대안) */}
-        <div style={{ marginBottom: '20px', textAlign: 'center' }}>
-          <button 
-            onClick={handlePayment}
-            style={{
-              padding: '16px 32px',
-              backgroundColor: '#0070ba',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '18px',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              width: '100%',
-              maxWidth: '300px'
-            }}
-          >
-            💳 PayPal로 결제하기 (${product.price})
-          </button>
-        </div>
-        
-        {/* PayPal 결제 버튼 (주석 처리) */}
-        {/*
+        {/* PayPal 결제 버튼 */}
         <PayPalScriptProvider options={{ 
           "client-id": PAYPAL_CLIENT_ID,
-          "currency": "USD"
+          "currency": "USD",
+          "intent": "capture"
         }}>
           <div className="mobile-paypal-container">
             <PayPalButtons
               style={{ 
                 layout: "vertical",
-                color: "blue",
+                color: "gold",
                 shape: "rect",
-                label: "pay"
+                label: "paypal"
               }}
               createOrder={(data, actions) => {
                 console.log("PayPal createOrder 호출됨");
@@ -218,10 +197,14 @@ function App() {
                     {
                       description: product.name,
                       amount: {
-                        value: product.price
+                        value: product.price,
+                        currency_code: "USD"
                       }
                     }
-                  ]
+                  ],
+                  application_context: {
+                    shipping_preference: "NO_SHIPPING"
+                  }
                 });
               }}
               onApprove={async (data, actions) => {
@@ -230,7 +213,7 @@ function App() {
                   const order = await actions.order.capture();
                   console.log("PayPal 결제 완료:", order);
                   
-                  const response = await fetch('http://localhost:5000/api/orders', {
+                  const response = await fetch(`${backendUrl}/api/orders`, {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',
@@ -245,13 +228,14 @@ function App() {
                   console.log("백엔드 응답:", result);
                   
                   if (result.success) {
-                    alert(`🎉 결제 완료! ${order.payer.name.given_name}님!\n주문이 성공적으로 저장되었습니다.`);
+                    alert(`🎉 PayPal 결제 완료! ${order.payer.name.given_name}님!\n주문이 성공적으로 저장되었습니다.\n주문 ID: ${order.id}`);
                   } else {
-                    alert(`결제는 완료되었지만 주문 저장 중 오류가 발생했습니다: ${result.message}`);
+                    alert(`PayPal 결제는 완료되었지만 주문 저장 중 오류가 발생했습니다: ${result.message}`);
                   }
                 } catch (error) {
                   console.error('PayPal 결제 처리 중 오류:', error);
-                  alert(`결제 처리 중 오류가 발생했습니다: ${error.message}`);
+                  console.error('백엔드 URL:', backendUrl);
+                  alert(`PayPal 결제 처리 중 오류가 발생했습니다: ${error.message}`);
                 }
               }}
               onError={(err) => {
@@ -260,12 +244,26 @@ function App() {
               }}
               onCancel={(data) => {
                 console.log("PayPal 결제 취소:", data);
-                alert("결제가 취소되었습니다.");
+                alert("PayPal 결제가 취소되었습니다.");
               }}
             />
           </div>
         </PayPalScriptProvider>
-        */}
+        
+        {/* PayPal 테스트 계정 정보 */}
+        <div style={{ 
+          marginTop: '20px', 
+          padding: '16px', 
+          backgroundColor: 'rgba(255, 255, 255, 0.1)', 
+          borderRadius: '8px',
+          textAlign: 'center',
+          color: 'white',
+          fontSize: '12px'
+        }}>
+          <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>PayPal 샌드박스 테스트 계정:</div>
+          <div>이메일: sb-1234567890@business.example.com</div>
+          <div>비밀번호: 123456789</div>
+        </div>
       </div>
     </div>
   );
@@ -586,3 +584,4 @@ function App() {
 }
 
 export default App;
+
