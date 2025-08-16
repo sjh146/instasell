@@ -12,19 +12,47 @@ const product = {
   videoUrl: "/output_fixed.mp4" // public 폴더 기준
 };
 
-// PayPal Client ID. "test"는 개발 및 테스트용 샌드박스 ID입니다.
-// 실제 서비스에서는 발급받은 본인의 Client ID로 교체해야 합니다.
-const PAYPAL_CLIENT_ID = "AYclIN8z4NgfjpWr7HIUOAip4fOM69wFvd9BKw7g1GFCkfnZcRwHaNGqQl2M0f8286oQRmUCK1qhp82k";
+// PayPal Client ID - 환경 변수에서 가져오거나 기본값 사용
+const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID || "AYclIN8z4NgfjpWr7HIUOAip4fOM69wFvd9BKw7g1GFCkfnZcRwHaNGqQl2M0f8286oQRmUCK1qhp82k";
 
-// 백엔드 URL을 동적으로 설정
+// 배포 환경에 따른 백엔드 URL 설정
 const getBackendUrl = () => {
-  // 모바일에서 접근할 때는 실제 IP 주소를 사용
-  if (window.location.hostname !== 'localhost') {
-    // 모바일에서 접근할 때는 현재 호스트의 IP를 사용
-    return `http://${window.location.hostname}:5000`;
+  // 환경 변수에서 백엔드 URL 가져오기
+  if (process.env.REACT_APP_BACKEND_URL) {
+    return process.env.REACT_APP_BACKEND_URL;
   }
-  // 데스크톱에서는 localhost 사용
+  
+  // 프로덕션 환경에서는 현재 호스트의 백엔드 포트 사용
+  if (process.env.NODE_ENV === 'production') {
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    const port = process.env.REACT_APP_BACKEND_PORT || '5000';
+    return `${protocol}//${hostname}:${port}`;
+  }
+  
+  // 개발 환경에서는 localhost 사용
   return 'http://localhost:5000';
+};
+
+// 배포 환경에 따른 PayPal 설정
+const getPayPalOptions = () => {
+  const baseOptions = {
+    "client-id": PAYPAL_CLIENT_ID,
+    "currency": "USD",
+    "intent": "capture"
+  };
+
+  // 프로덕션 환경에서는 추가 설정
+  if (process.env.NODE_ENV === 'production') {
+    return {
+      ...baseOptions,
+      "components": "buttons,funding-eligibility",
+      "disable-funding": "credit,card",
+      "enable-funding": "paylater,venmo"
+    };
+  }
+
+  return baseOptions;
 };
 
 function App() {
@@ -32,22 +60,54 @@ function App() {
   const [isMobile, setIsMobile] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [backendUrl, setBackendUrl] = useState(getBackendUrl());
+  const [isLoading, setIsLoading] = useState(true);
 
   // 모바일 감지 함수
   const checkMobile = () => {
     const mobileBreakpoint = 768;
-    setIsMobile(window.innerWidth <= mobileBreakpoint);
+    const isMobileDevice = window.innerWidth <= mobileBreakpoint || 
+                          /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    setIsMobile(isMobileDevice);
   };
 
-  // 컴포넌트 마운트 시와 윈도우 리사이즈 시 모바일 감지
+  // 컴포넌트 마운트 시 초기화
   useEffect(() => {
     checkMobile();
     window.addEventListener('resize', checkMobile);
+    
+    // 백엔드 연결 테스트
+    testBackendConnection();
     
     return () => {
       window.removeEventListener('resize', checkMobile);
     };
   }, []);
+
+  // 백엔드 연결 테스트
+  const testBackendConnection = async () => {
+    try {
+      const response = await fetch(`${backendUrl}/health`, {
+        method: 'GET',
+        timeout: 5000
+      });
+      
+      if (response.ok) {
+        console.log('백엔드 연결 성공:', backendUrl);
+      } else {
+        console.warn('백엔드 응답 오류:', response.status);
+      }
+    } catch (error) {
+      console.error('백엔드 연결 실패:', error);
+      // 백엔드 연결 실패 시 대체 URL 시도
+      if (backendUrl.includes('localhost')) {
+        const fallbackUrl = `http://${window.location.hostname}:5000`;
+        console.log('대체 백엔드 URL 시도:', fallbackUrl);
+        setBackendUrl(fallbackUrl);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleVideoClick = () => {
     setIsVideoPlaying(true);
@@ -60,6 +120,28 @@ function App() {
   const handleInstagramClick = () => {
     window.open('https://www.instagram.com', '_blank');
   };
+
+  // 로딩 중 표시
+  if (isLoading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        backgroundColor: '#000000',
+        color: '#ffffff',
+        fontSize: '18px'
+      }}>
+        <div>
+          <div style={{ marginBottom: '20px' }}>로딩 중...</div>
+          <div style={{ fontSize: '14px', color: '#888' }}>
+            백엔드 연결 확인 중: {backendUrl}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // 결제 처리 함수
   const handlePayment = async () => {
@@ -177,11 +259,7 @@ function App() {
         </div>
         
         {/* PayPal 결제 버튼 */}
-        <PayPalScriptProvider options={{ 
-          "client-id": PAYPAL_CLIENT_ID,
-          "currency": "USD",
-          "intent": "capture"
-        }}>
+        <PayPalScriptProvider options={getPayPalOptions()}>
           <div className="mobile-paypal-container">
             <PayPalButtons
               style={{ 
@@ -224,6 +302,10 @@ function App() {
                     })
                   });
                   
+                  if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                  }
+                  
                   const result = await response.json();
                   console.log("백엔드 응답:", result);
                   
@@ -235,7 +317,13 @@ function App() {
                 } catch (error) {
                   console.error('PayPal 결제 처리 중 오류:', error);
                   console.error('백엔드 URL:', backendUrl);
-                  alert(`PayPal 결제 처리 중 오류가 발생했습니다: ${error.message}`);
+                  
+                  // 네트워크 오류인 경우 사용자에게 안내
+                  if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    alert(`네트워크 연결 오류입니다.\n백엔드 서버가 실행 중인지 확인해주세요.\n백엔드 URL: ${backendUrl}`);
+                  } else {
+                    alert(`PayPal 결제 처리 중 오류가 발생했습니다: ${error.message}`);
+                  }
                 }
               }}
               onError={(err) => {
@@ -263,7 +351,27 @@ function App() {
           <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>PayPal 샌드박스 테스트 계정:</div>
           <div>이메일: sb-1234567890@business.example.com</div>
           <div>비밀번호: 123456789</div>
+          <div style={{ marginTop: '8px', fontSize: '10px', color: '#ccc' }}>
+            * 실제 돈이 차감되지 않는 테스트 환경입니다
+          </div>
         </div>
+        
+        {/* 배포 정보 (개발 환경에서만 표시) */}
+        {process.env.NODE_ENV === 'development' && (
+          <div style={{ 
+            marginTop: '10px', 
+            padding: '8px', 
+            backgroundColor: 'rgba(0, 255, 0, 0.1)', 
+            borderRadius: '4px',
+            textAlign: 'center',
+            color: '#00ff00',
+            fontSize: '10px'
+          }}>
+            <div>개발 모드</div>
+            <div>백엔드 URL: {backendUrl}</div>
+            <div>PayPal Client ID: {PAYPAL_CLIENT_ID.substring(0, 10)}...</div>
+          </div>
+        )}
       </div>
     </div>
   );
