@@ -111,7 +111,76 @@ function App() {
           <span className="mobile-usd-price">(USD ${product.price})</span>
         </div>
         
-        {/* PayPal 결제 버튼 */}
+        {/* 간단한 결제 버튼 (PayPal 대안) */}
+        <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+          <button 
+            onClick={async () => {
+              console.log("결제 버튼 클릭됨");
+              try {
+                // PayPal 결제 시뮬레이션
+                const mockOrder = {
+                  id: "PAY-" + Date.now(),
+                  status: "COMPLETED",
+                  payer: {
+                    name: {
+                      given_name: "테스트",
+                      surname: "사용자"
+                    },
+                    email_address: "test@example.com"
+                  },
+                  purchase_units: [{
+                    amount: {
+                      value: product.price,
+                      currency_code: "USD"
+                    }
+                  }]
+                };
+                
+                console.log("결제 주문:", mockOrder);
+                
+                const response = await fetch('http://localhost:5000/api/orders', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    paypal_order: mockOrder,
+                    product_name: product.name
+                  })
+                });
+                
+                const result = await response.json();
+                console.log("백엔드 응답:", result);
+                
+                if (result.success) {
+                  alert(`🎉 결제 완료! ${mockOrder.payer.name.given_name}님!\n주문이 성공적으로 저장되었습니다.\n주문 ID: ${mockOrder.id}`);
+                } else {
+                  alert(`결제는 완료되었지만 주문 저장 중 오류가 발생했습니다: ${result.message}`);
+                }
+              } catch (error) {
+                console.error('결제 처리 중 오류:', error);
+                alert(`결제 처리 중 오류가 발생했습니다: ${error.message}`);
+              }
+            }}
+            style={{
+              padding: '16px 32px',
+              backgroundColor: '#0070ba',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '18px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              width: '100%',
+              maxWidth: '300px'
+            }}
+          >
+            💳 PayPal로 결제하기 (${product.price})
+          </button>
+        </div>
+        
+        {/* PayPal 결제 버튼 (주석 처리) */}
+        {/*
         <PayPalScriptProvider options={{ 
           "client-id": PAYPAL_CLIENT_ID,
           "currency": "USD"
@@ -178,6 +247,7 @@ function App() {
             />
           </div>
         </PayPalScriptProvider>
+        */}
       </div>
     </div>
   );
