@@ -713,6 +713,7 @@ def health():
 
 # 관리자 페이지 라우트
 @app.route('/admin')
+@login_required
 def admin_page():
     return render_template('admin.html')
 
