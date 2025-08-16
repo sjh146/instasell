@@ -91,6 +91,7 @@ services:
       - PAYPAL_WEBHOOK_SECRET=${PAYPAL_WEBHOOK_SECRET:-dev-webhook-secret-12345}
       - PAYPAL_WEBHOOK_ID=${PAYPAL_WEBHOOK_ID:-WH-DEV-1234567890}
       - FLASK_ENV=development
+      - TZ=Asia/Seoul
     volumes:
       - ./backend:/app
       - backend_logs:/app/logs

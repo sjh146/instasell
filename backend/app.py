@@ -3,11 +3,12 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 import json
 import hmac
 import hashlib
+import pytz
 
 app = Flask(__name__)
 
@@ -40,6 +41,21 @@ from config import Config
 app.config.from_object(Config)
 
 db = SQLAlchemy(app)
+
+# 한국 시간대 설정
+KST = pytz.timezone('Asia/Seoul')
+
+def get_kst_now():
+    """현재 한국 시간을 반환"""
+    return datetime.now(KST)
+
+def utc_to_kst(utc_time):
+    """UTC 시간을 한국 시간으로 변환"""
+    if utc_time is None:
+        return None
+    if utc_time.tzinfo is None:
+        utc_time = pytz.utc.localize(utc_time)
+    return utc_time.astimezone(KST)
 
 # Flask-Login 설정
 login_manager = LoginManager()
@@ -164,7 +180,7 @@ class WebhookEvent(db.Model):
             'amount': self.amount,
             'currency': self.currency,
             'payer_email': self.payer_email,
-            'created_at': self.created_at.isoformat(),
+            'created_at': utc_to_kst(self.created_at).isoformat(),
             'processed': self.processed,
             'processing_time': self.processing_time,
             'error_message': self.error_message
@@ -642,7 +658,7 @@ def webhook_status():
                 'system': 'running',
                 'recent_webhooks_1h': recent_count,
                 'unprocessed_events': unprocessed_count,
-                'last_webhook_time': last_webhook.created_at.isoformat() if last_webhook else None,
+                'last_webhook_time': utc_to_kst(last_webhook.created_at).isoformat() if last_webhook else None,
                 'webhook_endpoint': '/api/webhooks/paypal',
                 'test_endpoint': '/api/webhooks/test'
             }
@@ -663,12 +679,12 @@ def simulate_webhook():
         
         # 시뮬레이션용 웹훅 데이터 생성
         webhook_data = {
-            "id": f"WH-SIM-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+            "id": f"WH-SIM-{get_kst_now().strftime('%Y%m%d%H%M%S')}",
             "event_type": event_type,
-            "create_time": datetime.utcnow().isoformat(),
+            "create_time": get_kst_now().isoformat(),
             "resource_type": "capture",
             "resource": {
-                "id": f"SIM-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+                "id": f"SIM-{get_kst_now().strftime('%Y%m%d%H%M%S')}",
                 "status": "COMPLETED",
                 "amount": {
                     "currency_code": "USD",

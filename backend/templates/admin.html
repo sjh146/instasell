@@ -531,7 +531,15 @@
                     document.getElementById('unprocessed-count').textContent = status.unprocessed_events;
                     
                     if (status.last_webhook_time) {
-                        const lastTime = new Date(status.last_webhook_time).toLocaleString('ko-KR');
+                        const lastTime = new Date(status.last_webhook_time).toLocaleString('ko-KR', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                            timeZone: 'Asia/Seoul'
+                        });
                         document.getElementById('last-webhook-time').textContent = lastTime;
                     } else {
                         document.getElementById('last-webhook-time').textContent = '없음';
@@ -573,7 +581,15 @@
                                 <div class="event-details">
                                     ID: ${event.event_id} | 
                                     ${event.amount ? `$${event.amount} ${event.currency}` : 'N/A'} | 
-                                    ${new Date(event.created_at).toLocaleString('ko-KR')}
+                                    ${new Date(event.created_at).toLocaleString('ko-KR', {
+                                        year: 'numeric',
+                                        month: '2-digit',
+                                        day: '2-digit',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        second: '2-digit',
+                                        timeZone: 'Asia/Seoul'
+                                    })}
                                 </div>
                             </div>
                             <div class="event-status ${event.processed ? 'status-completed' : 'status-pending'}">
